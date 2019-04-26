@@ -1,0 +1,33 @@
+{
+  "name": "mountable-hypertrie",
+  "version": "1.0.0",
+  "description": "A Hypertrie wrapper that supports mounting of other Hypertries",
+  "main": "index.js",
+  "scripts": {
+    "test": "tape test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewosh/mountable-hypertrie.git"
+  },
+  "keywords": [
+    "mount",
+    "mountable",
+    "hypertrie"
+  ],
+  "author": "Andrew Osheroff <andrewosh@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/andrewosh/mountable-hypertrie/issues"
+  },
+  "homepage": "https://github.com/andrewosh/mountable-hypertrie#readme",
+  "devDependencies": {
+    "corestore": "^1.2.2",
+    "rimraf": "^2.6.3",
+    "standard": "^12.0.1",
+    "tape": "^4.10.1"
+  },
+  "dependencies": {
+    "protocol-buffers-encodings": "^1.1.0"
+  }
+}
