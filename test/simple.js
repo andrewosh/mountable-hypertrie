@@ -40,7 +40,7 @@ test('simple cross-trie put/get', async t => {
   t.end()
 })
 
-test('simple cross-trie put/get', async t => {
+test('recursive cross-trie put/get', async t => {
   const { tries, cores, store } = await create(3)
   const [rootTrie, subTrie, subsubTrie] = tries
 
