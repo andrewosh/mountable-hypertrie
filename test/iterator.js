@@ -86,9 +86,38 @@ test('multi-level nested iterator', async t => {
 
   await cleanup(cores, store)
   t.end()
-
 })
-test('list iterator')
+
+test('list iterator', async t => {
+  const { tries, cores, store } = await create(3)
+  const [rootTrie, aTrie, abTrie] = tries
+
+  const vals = ['b', 'c', 'a/a', 'a/b/c', 'a/b/d', 'a/c', 'e']
+  const expected = toMap(vals)
+
+  try {
+    await put(rootTrie, ['b', 'c', 'e'])
+    await put(aTrie, ['a', 'c'], 'a/')
+    await put(abTrie, ['c', 'd'], 'a/b/')
+    await runAll([
+      cb => rootTrie.mount('a/', aTrie.key, cb),
+      cb => aTrie.mount('b/', abTrie.key, cb),
+      cb => {
+        rootTrie.list((err, l) => {
+          t.error(err, 'no error')
+          const res = l.reduce((acc, node) => { acc[node.key] = node.value.toString('utf8'); return acc }, {})
+          t.same(res, expected, 'listed all values')
+          return cb(null)
+        })
+      }
+    ])
+  } catch (err) {
+    t.error(err)
+  }
+
+  await cleanup(cores, store)
+  t.end()
+})
 
 // Duplicated from hypertrie.
 function toMap (list) {
