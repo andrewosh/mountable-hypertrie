@@ -1,5 +1,6 @@
 const test = require('tape')
 const { create, cleanup } = require('./helpers/create')
+const { runAll } = require('./helpers/util')
 
 test('simple cross-trie put/get', async t => {
   const { tries, cores, store } = await create(2)
@@ -81,18 +82,3 @@ test('recursive cross-trie put/get', async t => {
   await cleanup(cores, store)
   t.end()
 })
-
-
-function runAll (ops) {
-  return new Promise((resolve, reject) => {
-    runNext(ops.shift())
-    function runNext (op) {
-      op(err => {
-        if (err) return reject(err)
-        let next = ops.shift()
-        if (!next) return resolve()
-        return runNext(next)
-      })
-    }
-  })
-}

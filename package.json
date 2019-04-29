@@ -28,7 +28,10 @@
     "tape": "^4.10.1"
   },
   "dependencies": {
+    "hypertrie": "git+https://github.com/mafintosh/hypertrie#closest-nodes-feature",
+    "is-options": "^1.0.1",
+    "nanoiterator": "^1.2.0",
     "protocol-buffers-encodings": "^1.1.0",
-    "hypertrie": "git+https://github.com/mafintosh/hypertrie#closest-nodes-feature"
+    "unixify": "^1.0.0"
   }
 }

@@ -1,6 +1,9 @@
 const p = require('path')
 const hypertrie = require('hypertrie')
 const thunky = require('thunky')
+const nanoiterator = require('nanoiterator')
+const isOptions = require('is-options')
+const unixify = require('unixify')
 
 const { Mount } = require('./lib/messages')
 
@@ -30,7 +33,7 @@ class MountableHypertrie {
   }
 
   _ready (cb) {
-    this._trie = hypertrie(null, { feed: this.factory(this.key, this.opts) })
+    this._trie = hypertrie(null, { feed: this.factory(this.key, this.opts), ...this.opts })
     this._trie.ready(err => {
       if (err) return cb(err)
       this.key = this._trie.key
@@ -77,13 +80,12 @@ class MountableHypertrie {
 
   mount (path, key, opts, cb) {
     if (typeof opts === 'function') return this.mount(path, key, null, opts)
-    if (path.startsWith('/')) path = path.slice(1)
-
+    path = normalize(path)
 
     const mountRecord = Mount.encode({
       key,
       localPath: path,
-      remotePath: opts && opts.remotePath,
+      remotePath: opts && opts.remotePath && normalize(opts.remotePath),
       version: opts && opts.version
     })
     this._trie.batch([
@@ -95,7 +97,7 @@ class MountableHypertrie {
 
   get (path, opts, cb) {
     if (typeof opts === 'function') return this.get(path, null, opts)
-    if (path.startsWith('/')) path = path.slice(1)
+    path = normalize(path)
 
     const self = this
 
@@ -123,7 +125,7 @@ class MountableHypertrie {
 
   put (path, value, opts, cb) {
     if (typeof opts === 'function') return this.put(path, value, null, opts)
-    if (path.startsWith('/')) path = path.slice(1)
+    path = normalize(path)
 
     const self = this
     const condition = putCondition(opts && opts.condition)
@@ -153,19 +155,73 @@ class MountableHypertrie {
   }
 
   del (path, opts, cb) {
-
-  }
-
-  batch (ops, cb) {
+    if (isOptions(cb)) return this.del(path, null, opts)
     // TODO: implement
   }
 
   iterator (prefix, opts) {
+    if (isOptions(prefix)) return this.iterator('', prefix)
+    if (!prefix) prefix = '/'
+    prefix = normalize(prefix)
 
+    const self = this
+
+    // If the iterator contains nodes in the current trie, then the root will be non-null.
+    let root = this._trie.iterator(prefix, opts)
+    // If the iterator is currently iterating through a sub-trie, then these will be non-null.
+    let sub = null
+    let subInfo = null
+
+    return nanoiterator({ next })
+
+    function next (cb) {
+      if (sub) {
+        return sub.next((err, node) => {
+          if (err) return cb(err)
+          if (!node) {
+            sub = subInfo = null
+            return next(cb)
+          }
+          node.key = pathFromMount(node.key, subInfo)
+          return cb(null, node)
+        })
+      }
+      root.next((err, node) => {
+        if (err) return cb(err)
+        if (!node) return cb(null)
+        if (node.flags ^ Flags.MOUNT) return cb(null, node)
+        self._trie.get(p.join(MOUNT_PREFIX, node.key), { hidden: true, closest: true }, (err, mountNode) => {
+          if (err) return cb(err)
+          self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
+            if (err) return cb(err)
+            const subPrefix = pathToMount(node.key, mountInfo)
+            sub = trie.iterator(subPrefix, opts)
+            subInfo = mountInfo
+            return next(cb)
+          })
+        })
+      })
+    }
   }
 
   list (prefix, opts, cb) {
+    // Code duplicated from hypertrie.
+    if (typeof prefix === 'function') return this.list('', null, prefix)
+    if (typeof opts === 'function') return this.list(prefix, null, opts)
 
+    const ite = this.iterator(prefix, opts)
+    const res = []
+
+    ite.next(function loop (err, node) {
+      if (err) return cb(err)
+      if (!node) return cb(null, res)
+      res.push(node)
+      ite.next(loop)
+    })
+  }
+
+  batch (ops, cb) {
+    // TODO: implement
   }
 
   checkout (version) {
@@ -201,13 +257,16 @@ function putCondition (userCondition) {
 }
 
 function pathToMount (path, mountInfo) {
-  const rel = p.relative(mountInfo.localPath, path)
-  const joined = mountInfo.remotePath ? p.join(mountInfo.remotePath, rel) : rel
-  return joined.startsWith('/') ? joined.slice(1) : joined
+  if (path.length === mountInfo.localPath.length) return ''
+  return p.join(path.slice(mountInfo.localPath.length), mountInfo.remotePath)
 }
 
 function pathFromMount (path, mountInfo) {
-  const rel = mountInfo.remotePath ? p.relative(mountInfo.remotePath, path) : path
-  const joined = p.join(mountInfo.localPath, rel)
-  return joined.startsWith('/') ? joined.slice(1) : joined
+  const rel = mountInfo.remotePath ? path.slice(mountInfo.remotePath.length) : path
+  return p.join(mountInfo.localPath, rel)
+}
+
+function normalize (path) {
+  path = unixify(path)
+  return path.startsWith('/') ? path.slice(1) :  path
 }

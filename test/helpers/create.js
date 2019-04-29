@@ -6,7 +6,7 @@ const mountableHypertrie = require('../..')
 
 const STORAGE = 'test-storage'
 
-module.exports.create = async function (numTries) {
+module.exports.create = async function (numTries, opts) {
   const store = corestore(STORAGE, { network: { disable: true } })
   await store.ready()
   const cores = []
@@ -17,7 +17,7 @@ module.exports.create = async function (numTries) {
       cores.push(core)
       return core
     }
-    const trie = mountableHypertrie(factory, null)
+    const trie = mountableHypertrie(factory, null, opts)
     await promisify(trie.ready)()
     tries.push(trie)
   }
