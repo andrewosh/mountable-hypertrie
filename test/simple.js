@@ -1,6 +1,9 @@
 const test = require('tape')
-const { create, cleanup } = require('./helpers/create')
+
+const { create } = require('./helpers/create')
 const { runAll } = require('./helpers/util')
+
+const MountableHypertrie = require('..')
 
 test('simple cross-trie put/get', async t => {
   const { tries, cores, store } = await create(2)
@@ -37,7 +40,6 @@ test('simple cross-trie put/get', async t => {
     t.error(err)
   }
 
-  await cleanup(cores, store)
   t.end()
 })
 
@@ -79,6 +81,44 @@ test('recursive cross-trie put/get', async t => {
     t.error(err)
   }
 
-  await cleanup(cores, store)
   t.end()
 })
+
+test('recursive get node references the correct sub-trie', async t => {
+  const { tries, cores, store } = await create(3)
+  const [rootTrie, subTrie, subsubTrie] = tries
+
+  try {
+    await runAll([
+      cb => rootTrie.mount('/a', subTrie.key, cb),
+      cb => subTrie.mount('/b', subsubTrie.key, cb),
+      cb => rootTrie.put('/b', 'hello', cb),
+      cb => subTrie.put('/c', 'dog', cb),
+      cb => rootTrie.put('/a/d', 'goodbye', cb),
+      cb => rootTrie.put('/a/b/d', 'cat', cb),
+      cb => rootTrie.get('/a/d', (err, node) => {
+        if (err) return cb(err)
+        t.true(node)
+        t.same(node[MountableHypertrie.Symbols.TRIE].key, subTrie.key)
+        return cb(null)
+      }),
+      cb => rootTrie.get('/a/b/d', (err, node) => {
+        if (err) return cb(err)
+        t.true(node)
+        t.same(node[MountableHypertrie.Symbols.TRIE].key, subsubTrie.key)
+        return cb(null)
+        }),
+      cb => rootTrie.get('/b', (err, node) => {
+        if (err) return cb(err)
+        t.true(node)
+        t.same(node[MountableHypertrie.Symbols.TRIE].key, rootTrie.key)
+        return cb(null)
+      })
+    ])
+  } catch (err) {
+    t.error(err)
+  }
+
+  t.end()
+})
+

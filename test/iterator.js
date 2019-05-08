@@ -1,9 +1,12 @@
 const test = require('tape')
-const { create, cleanup } = require('./helpers/create')
+
+const { create } = require('./helpers/create')
 const { runAll } = require('./helpers/util')
 
+const MountableHypertrie = require('..')
+
 test('simple single-trie iterator', async t => {
-  const { tries, cores, store } = await create(1)
+  const { tries } = await create(1)
   const [rootTrie] = tries
 
   const vals = ['a', 'b', 'c']
@@ -24,12 +27,11 @@ test('simple single-trie iterator', async t => {
     t.error(err)
   }
 
-  await cleanup(cores, store)
   t.end()
 })
 
 test('one-level nested iterator', async t => {
-  const { tries, cores, store } = await create(3)
+  const { tries } = await create(3)
   const [rootTrie, aTrie, dTrie] = tries
 
   const vals = ['b', 'c', 'a/a', 'a/b', 'd/e', 'd/f']
@@ -54,12 +56,11 @@ test('one-level nested iterator', async t => {
     t.error(err)
   }
 
-  await cleanup(cores, store)
   t.end()
 })
 
 test('multi-level nested iterator', async t => {
-  const { tries, cores, store } = await create(3)
+  const { tries } = await create(3)
   const [rootTrie, aTrie, abTrie] = tries
 
   const vals = ['b', 'c', 'a/a', 'a/b/c', 'a/b/d', 'a/c', 'e']
@@ -84,12 +85,11 @@ test('multi-level nested iterator', async t => {
     t.error(err)
   }
 
-  await cleanup(cores, store)
   t.end()
 })
 
 test('list iterator', async t => {
-  const { tries, cores, store } = await create(3)
+  const { tries } = await create(3)
   const [rootTrie, aTrie, abTrie] = tries
 
   const vals = ['b', 'c', 'a/a', 'a/b/c', 'a/b/d', 'a/c', 'e']
@@ -115,8 +115,49 @@ test('list iterator', async t => {
     t.error(err)
   }
 
-  await cleanup(cores, store)
   t.end()
+})
+
+test('iterator nodes reference correct sub-tries', async t => {
+  const { tries } = await create(3)
+  const [rootTrie, aTrie, abTrie] = tries
+
+  const vals = ['b', 'c', 'a/a', 'a/b/c', 'a/b/d', 'a/c', 'e']
+  const expected = {
+    'b': rootTrie.key,
+    'c': rootTrie.key,
+    'e': rootTrie.key,
+    'a/a': aTrie.key,
+    'a/c': aTrie.key,
+    'a/b/c': abTrie.key,
+    'a/b/d': abTrie.key
+  }
+
+  try {
+    await put(rootTrie, ['b', 'c', 'e'])
+    await put(aTrie, ['a', 'c'], 'a/')
+    await put(abTrie, ['c', 'd'], 'a/b/')
+    await runAll([
+      cb => rootTrie.mount('a/', aTrie.key, cb),
+      cb => aTrie.mount('b/', abTrie.key, cb),
+      cb => {
+        rootTrie.list((err, l) => {
+          t.error(err, 'no error')
+          const res = l.reduce((acc, node) => {
+            acc[node.key] = node[MountableHypertrie.Symbols.TRIE].key
+            return acc
+          }, {})
+          t.same(res, expected, 'trie references are all correct')
+          return cb(null)
+        })
+      }
+    ])
+  } catch (err) {
+    t.error(err)
+  }
+
+  t.end()
+
 })
 
 // Duplicated from hypertrie.

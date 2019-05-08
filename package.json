@@ -22,13 +22,13 @@
   },
   "homepage": "https://github.com/andrewosh/mountable-hypertrie#readme",
   "devDependencies": {
-    "corestore": "^1.2.2",
+    "random-access-memory": "^3.1.1",
     "rimraf": "^2.6.3",
     "standard": "^12.0.1",
     "tape": "^4.10.1"
   },
   "dependencies": {
-    "hypertrie": "git+https://github.com/mafintosh/hypertrie#closest-nodes-feature",
+    "hypertrie": "git+https://github.com/andrewosh/hypertrie#closest-nodes-feature",
     "is-options": "^1.0.1",
     "nanoiterator": "^1.2.0",
     "protocol-buffers-encodings": "^1.1.0",

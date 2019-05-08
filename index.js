@@ -2,6 +2,7 @@ const p = require('path')
 const hypertrie = require('hypertrie')
 const thunky = require('thunky')
 const nanoiterator = require('nanoiterator')
+const toStream = require('nanoiterator/to-stream')
 const isOptions = require('is-options')
 const unixify = require('unixify')
 
@@ -12,19 +13,17 @@ const Flags = {
 }
 const MOUNT_PREFIX = '/mounts'
 
-module.exports = mountableHypertrie
-function mountableHypertrie (...args) {
-  return new MountableHypertrie(...args)
-}
-
 class MountableHypertrie {
-  constructor (factory, key, opts) {
-    this.factory = factory
+  constructor (corestore, key, opts = {}) {
+    this.corestore = corestore
     this.key = key
     this.opts = opts
 
     // Set in _ready.
-    this._trie = null
+    this._trie = (opts && opts.trie) || hypertrie(null, {
+      feed: this.opts.feed || this.corestore.get({ key: this.key, main: !this.key, ...this.opts }),
+      ...opts
+    })
     // TODO: Replace with a LRU cache.
     this._tries = new Map()
     this._checkouts = new Map()
@@ -33,7 +32,6 @@ class MountableHypertrie {
   }
 
   _ready (cb) {
-    this._trie = hypertrie(null, { feed: this.factory(this.key, this.opts), ...this.opts })
     this._trie.ready(err => {
       if (err) return cb(err)
       this.key = this._trie.key
@@ -47,7 +45,7 @@ class MountableHypertrie {
     var versionedTrie = (opts && opts.version) ? this._checkouts.get(`${key}:${opts.version}`) : null
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
-    var trie = this._tries.get(key) || mountableHypertrie(this.factory, key, opts)
+    var trie = this._tries.get(key) || new MountableHypertrie(this.corestore, key, opts)
     self._tries.set(key, trie)
 
     if (!trie.opened) {
@@ -78,6 +76,20 @@ class MountableHypertrie {
     })
   }
 
+  getMetadata (cb) {
+    console.log('getting metadata')
+    return this._trie.getMetadata(cb)
+  }
+
+  setMetadata (metadata, cb) {
+    return this._trie.setMetadata(metadata, cb)
+  }
+
+  getFeed () {
+    if (!this._trie) return null
+    return this._trie.feed
+  }
+
   mount (path, key, opts, cb) {
     if (typeof opts === 'function') return this.mount(path, key, null, opts)
     path = normalize(path)
@@ -101,10 +113,15 @@ class MountableHypertrie {
 
     const self = this
 
+    console.log('IN GET, feed length:', this._trie.feed.length, 'feed key:', this._trie.feed.key)
+
     this._trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
-      if (!node) return cb(null, null)
-      if (node.flags ^ Flags.MOUNT) return cb(null, node)
+      if (!node) return cb(null, null, this)
+      if (node.flags ^ Flags.MOUNT) {
+        node[MountableHypertrie.Symbols.TRIE] = this
+        return cb(null, node, this)
+      }
       this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, getFromMount)
     })
 
@@ -112,12 +129,13 @@ class MountableHypertrie {
       if (err) return cb(err)
       self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
         if (err) return cb(err)
-        return trie.get(pathToMount(path, mountInfo), opts, (err, node) => {
+        return trie.get(pathToMount(path, mountInfo), opts, (err, node, subTrie) => {
           if (err) return cb(err)
-          if (!node) return cb(null, null)
+          if (!node) return cb(null, null, subTrie)
           // TODO: do we need to copy the node here?
           node.key = pathFromMount(node.key, mountInfo)
-          return cb(null, node)
+          if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = subTrie
+          return cb(null, node, subTrie)
         })
       })
     }
@@ -183,13 +201,17 @@ class MountableHypertrie {
             return next(cb)
           }
           node.key = pathFromMount(node.key, subInfo)
+          if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = sub
           return cb(null, node)
         })
       }
       root.next((err, node) => {
         if (err) return cb(err)
         if (!node) return cb(null)
-        if (node.flags ^ Flags.MOUNT) return cb(null, node)
+        if (node.flags ^ Flags.MOUNT) {
+          node[MountableHypertrie.Symbols.TRIE] = self
+          return cb(null, node)
+        }
         self._trie.get(p.join(MOUNT_PREFIX, node.key), { hidden: true, closest: true }, (err, mountNode) => {
           if (err) return cb(err)
           self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
@@ -220,26 +242,55 @@ class MountableHypertrie {
     })
   }
 
+  createReadStream (prefix, opts) {
+    return toStream(this.iterator(prefix, opts))
+  }
+
   batch (ops, cb) {
     // TODO: implement
   }
 
   checkout (version) {
-
-  }
-
-  snapshot () {
-
+    if (version === 0) version = 1
+    return new MountableHypertrie(this.corestore, null, {
+      trie: this._trie,
+      checkout: version || 1,
+      ...this.opts
+    })
   }
 
   watch (path, onchange) {
-
+    let rootWatcher = this._trie.watch(path, onchange)
+    const watchers = []
+    this._trie.list(p.join(MOUNT_PREFIX, path), { hidden: true }, (err, mountNodes) => {
+      if (err) return rootWatcher.emit('error', err)
+      for (let mountNode of mountNodes) {
+        this._trieForMountNode(mountNode, (err, trie, mountInfo) => {
+          if (err) return rootWatcher.emit('error', err)
+          watchers.push(trie.watch(pathToMount(path, mountInfo), onchange))
+        })
+      }
+    })
+    const destroy = rootWatcher.destroy.bind(rootWatcher)
+    rootWatcher.destroy = function () {
+      destroy()
+      for (let watcher of watcherss) {
+        watcher.destroy()
+      }
+    }
+    return rootWatcher
   }
 
   replicate (opts) {
-
+    return this.corestore.replicate(opts)
   }
 }
+
+MountableHypertrie.Symbols = MountableHypertrie.prototype.Symbols = {
+  TRIE: Symbol('trie')
+}
+
+module.exports = MountableHypertrie
 
 function putCondition (userCondition) {
   return (closest, newNode, cb) => {
