@@ -76,8 +76,11 @@ class MountableHypertrie {
     })
   }
 
+  get version () {
+    return this._trie.version
+  }
+
   getMetadata (cb) {
-    console.log('getting metadata')
     return this._trie.getMetadata(cb)
   }
 
@@ -113,12 +116,11 @@ class MountableHypertrie {
 
     const self = this
 
-    console.log('IN GET, feed length:', this._trie.feed.length, 'feed key:', this._trie.feed.key)
-
     this._trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
       if (!node) return cb(null, null, this)
       if (node.flags ^ Flags.MOUNT) {
+        if (node.key !== path) return cb(null, null, this)
         node[MountableHypertrie.Symbols.TRIE] = this
         return cb(null, node, this)
       }
@@ -134,6 +136,7 @@ class MountableHypertrie {
           if (!node) return cb(null, null, subTrie)
           // TODO: do we need to copy the node here?
           node.key = pathFromMount(node.key, mountInfo)
+          if (node.key !== path) return cb(null, null, subTrie)
           if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = subTrie
           return cb(null, node, subTrie)
         })
@@ -146,7 +149,7 @@ class MountableHypertrie {
     path = normalize(path)
 
     const self = this
-    const condition = putCondition(opts && opts.condition)
+    const condition = putCondition(path, opts && opts.condition)
 
     this._trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
       if (err && !err.mountpoint) return cb(err)
@@ -172,9 +175,41 @@ class MountableHypertrie {
     }
   }
 
+  // TODO: remove duplicate code
   del (path, opts, cb) {
-    if (isOptions(cb)) return this.del(path, null, opts)
-    // TODO: implement
+    if (typeof opts === 'function') return this.del(path, null, opts)
+    path = normalize(path)
+
+    const self = this
+    const condition = delCondition(path, opts && opts.condition)
+  
+    console.log('TOP LEVEL DELETE, path:', path)
+    this._trie.del(path, { ...opts, condition, closest: true }, (err, deleted) => {
+      if (err && !err.mountpoint) return cb(err)
+      else if (err) {
+        console.log('DELETING FROM A SUBTRIE')
+        return this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, delFromMount)
+      }
+      console.log('DELETED FROM MY TRIE, deleted:', deleted)
+      return cb(null, deleted)
+    })
+
+    function delFromMount (err, mountNode) {
+      if (err) return cb(err)
+      self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
+        if (err) return cb(err)
+        const mountPath = pathToMount(path, mountInfo)
+        console.log('DELETING AT MOUNTPATH:', mountPath, 'path:', path, 'mountInfo:', mountInfo)
+        return trie.del(mountPath, opts, (err, node) => {
+          if (err) return cb(err)
+          console.log('AFTER DEL, node:', node)
+          if (!node) return cb(null, null)
+          // TODO: do we need to copy the node here?
+          node.key = pathFromMount(node.key, mountInfo)
+          return cb(null, node)
+        })
+      })
+    }
   }
 
   iterator (prefix, opts) {
@@ -207,7 +242,7 @@ class MountableHypertrie {
       }
       root.next((err, node) => {
         if (err) return cb(err)
-        if (!node) return cb(null)
+        if (!node) return cb(null, null)
         if (node.flags ^ Flags.MOUNT) {
           node[MountableHypertrie.Symbols.TRIE] = self
           return cb(null, node)
@@ -292,17 +327,35 @@ MountableHypertrie.Symbols = MountableHypertrie.prototype.Symbols = {
 
 module.exports = MountableHypertrie
 
-function putCondition (userCondition) {
+function putCondition (path, userCondition) {
   return (closest, newNode, cb) => {
-    if (closest && (closest.flags & Flags.MOUNT) && (newNode.key.startsWith(closest.key))) {
-      const err = new Error('Inserting into mountpoint')
+    if (closest && (closest.flags & Flags.MOUNT) && newNode.key.startsWith(closest.key)) {
+      const err = new Error('Operating on a mountpoint')
       err.mountpoint = true
       return cb(err)
     }
     if (!userCondition) return cb(null, true)
-    userCondition(closest, newNode, (err, shouldPut) => {
+    userCondition(closest, newNode, (err, shouldExecute) => {
       if (err) return cb(err)
-      return cb(null, shouldPut)
+      return cb(null, shouldExecute)
+    })
+  }
+}
+
+function delCondition (path, userCondition) {
+  return (closest, cb) => {
+    console.log('IN DEL CONDITION, closest:', closest)
+    if (closest && (closest.flags & Flags.MOUNT) && (closest.key !== path)) {
+      const err = new Error('Operating on a mountpoint')
+      err.mountpoint = true
+      console.log('RETURNING MOUTNPOINT ERR')
+      return cb(err)
+    }
+    console.log('RETURNING TRUE IN DEL CONDITION')
+    if (!userCondition) return cb(null, true)
+    userCondition(closest, (err, shouldExecute) => {
+      if (err) return cb(err)
+      return cb(null, shouldExecute)
     })
   }
 }
