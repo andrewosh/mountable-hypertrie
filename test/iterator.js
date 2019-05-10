@@ -34,7 +34,7 @@ test('one-level nested iterator', async t => {
   const { tries } = await create(3)
   const [rootTrie, aTrie, dTrie] = tries
 
-  const vals = ['b', 'c', 'a/a', 'a/b', 'd/e', 'd/f']
+  const vals = ['a', 'b', 'c', 'd', 'a/a', 'a/b', 'd/e', 'd/f']
   const expected = toMap(vals)
 
   try {
@@ -42,8 +42,8 @@ test('one-level nested iterator', async t => {
     await put(aTrie, ['a', 'b'], 'a/')
     await put(dTrie, ['e', 'f'], 'd/')
     await runAll([
-      cb => rootTrie.mount('a/', aTrie.key, cb),
-      cb => rootTrie.mount('d/', dTrie.key, cb),
+      cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
+      cb => rootTrie.mount('d', dTrie.key, { value: 'd' }, cb),
       cb => {
         all(rootTrie.iterator(), (err, map) => {
           t.error(err, 'no error')
@@ -63,7 +63,7 @@ test('multi-level nested iterator', async t => {
   const { tries } = await create(3)
   const [rootTrie, aTrie, abTrie] = tries
 
-  const vals = ['b', 'c', 'a/a', 'a/b/c', 'a/b/d', 'a/c', 'e']
+  const vals = ['a', 'b', 'c', 'a/a', 'a/b', 'a/b/c', 'a/b/d', 'a/c', 'e']
   const expected = toMap(vals)
 
   try {
@@ -71,8 +71,8 @@ test('multi-level nested iterator', async t => {
     await put(aTrie, ['a', 'c'], 'a/')
     await put(abTrie, ['c', 'd'], 'a/b/')
     await runAll([
-      cb => rootTrie.mount('a/', aTrie.key, cb),
-      cb => aTrie.mount('b/', abTrie.key, cb),
+      cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
+      cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
       cb => {
         all(rootTrie.iterator(), (err, map) => {
           t.error(err, 'no error')
@@ -92,7 +92,7 @@ test('list iterator', async t => {
   const { tries } = await create(3)
   const [rootTrie, aTrie, abTrie] = tries
 
-  const vals = ['b', 'c', 'a/a', 'a/b/c', 'a/b/d', 'a/c', 'e']
+  const vals = ['a', 'b', 'c', 'a/a', 'a/b', 'a/b/c', 'a/b/d', 'a/c', 'e']
   const expected = toMap(vals)
 
   try {
@@ -100,8 +100,8 @@ test('list iterator', async t => {
     await put(aTrie, ['a', 'c'], 'a/')
     await put(abTrie, ['c', 'd'], 'a/b/')
     await runAll([
-      cb => rootTrie.mount('a/', aTrie.key, cb),
-      cb => aTrie.mount('b/', abTrie.key, cb),
+      cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
+      cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
       cb => {
         rootTrie.list((err, l) => {
           t.error(err, 'no error')
@@ -122,12 +122,14 @@ test('iterator nodes reference correct sub-tries', async t => {
   const { tries } = await create(3)
   const [rootTrie, aTrie, abTrie] = tries
 
-  const vals = ['b', 'c', 'a/a', 'a/b/c', 'a/b/d', 'a/c', 'e']
+  const vals = ['a', 'b', 'c', 'a/a', 'a/b', 'a/b/c', 'a/b/d', 'a/c', 'e']
   const expected = {
+    'a': rootTrie.key,
     'b': rootTrie.key,
     'c': rootTrie.key,
     'e': rootTrie.key,
     'a/a': aTrie.key,
+    'a/b': aTrie.key,
     'a/c': aTrie.key,
     'a/b/c': abTrie.key,
     'a/b/d': abTrie.key
@@ -138,8 +140,8 @@ test('iterator nodes reference correct sub-tries', async t => {
     await put(aTrie, ['a', 'c'], 'a/')
     await put(abTrie, ['c', 'd'], 'a/b/')
     await runAll([
-      cb => rootTrie.mount('a/', aTrie.key, cb),
-      cb => aTrie.mount('b/', abTrie.key, cb),
+      cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
+      cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
       cb => {
         rootTrie.list((err, l) => {
           t.error(err, 'no error')

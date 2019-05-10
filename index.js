@@ -106,7 +106,7 @@ class MountableHypertrie {
     this._trie.batch([
       { type: 'put', key: p.join(MOUNT_PREFIX, path), hidden: true, value: mountRecord },
       // TODO: empty values going to cause harm here?
-      { type: 'put', key: path, flags: Flags.MOUNT, value: Buffer.from('a') }
+      { type: 'put', key: path, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
     ], cb)
   }
 
@@ -124,6 +124,7 @@ class MountableHypertrie {
         node[MountableHypertrie.Symbols.TRIE] = this
         return cb(null, node, this)
       }
+      if (node.key === path) return cb(null, node)
       this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, getFromMount)
     })
 
@@ -149,7 +150,7 @@ class MountableHypertrie {
     path = normalize(path)
 
     const self = this
-    const condition = putCondition(path, opts && opts.condition)
+    const condition = putCondition(path, opts)
 
     this._trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
       if (err && !err.mountpoint) return cb(err)
@@ -243,10 +244,10 @@ class MountableHypertrie {
       root.next((err, node) => {
         if (err) return cb(err)
         if (!node) return cb(null, null)
-        if (node.flags ^ Flags.MOUNT) {
-          node[MountableHypertrie.Symbols.TRIE] = self
-          return cb(null, node)
-        }
+
+        node[MountableHypertrie.Symbols.TRIE] = self
+        if (node.flags ^ Flags.MOUNT) return cb(null, node)
+
         self._trie.get(p.join(MOUNT_PREFIX, node.key), { hidden: true, closest: true }, (err, mountNode) => {
           if (err) return cb(err)
           self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
@@ -254,7 +255,7 @@ class MountableHypertrie {
             const subPrefix = pathToMount(node.key, mountInfo)
             sub = trie.iterator(subPrefix, opts)
             subInfo = mountInfo
-            return next(cb)
+            return cb(null, node)
           })
         })
       })
@@ -327,7 +328,9 @@ MountableHypertrie.Symbols = MountableHypertrie.prototype.Symbols = {
 
 module.exports = MountableHypertrie
 
-function putCondition (path, userCondition) {
+function putCondition (path, opts) {
+  const userCondition = opts && opts.condition
+  const userClosest = opts && opts.closest
   return (closest, newNode, cb) => {
     if (closest && (closest.flags & Flags.MOUNT) && newNode.key.startsWith(closest.key)) {
       const err = new Error('Operating on a mountpoint')
@@ -335,8 +338,10 @@ function putCondition (path, userCondition) {
       return cb(err)
     }
     if (!userCondition) return cb(null, true)
+    if (closest && closest.key !== newNode.key && !userClosest) closest = null 
     userCondition(closest, newNode, (err, shouldExecute) => {
       if (err) return cb(err)
+    console.log('SHOULD EXECUTE:', shouldExecute)
       return cb(null, shouldExecute)
     })
   }
