@@ -49,8 +49,7 @@ class MountableHypertrie {
     self._tries.set(key, trie)
 
     if (!trie.opened) {
-      trie.ready(err => {
-        if (err) return cb(err)
+      trie.ready(err => { if (err) return cb(err)
         onready()
       })
     } else process.nextTick(onready)
@@ -73,6 +72,13 @@ class MountableHypertrie {
     this._createHypertrie(mountInfo.key, { version: mountInfo.version }, (err, trie) => {
       if (err) return cb(err)
       return cb(null, trie, mountInfo)
+    })
+  }
+
+  _getSubtrie (path, cb) {
+    this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
+      if (err) return cb(err)
+      return this._trieForMountNode(mountNode, cb)
     })
   }
 
@@ -110,6 +116,10 @@ class MountableHypertrie {
     ], cb)
   }
 
+  loadMount (path, cb) {
+    return this._getSubtrie(path, cb)
+  }
+
   get (path, opts, cb) {
     if (typeof opts === 'function') return this.get(path, null, opts)
     path = normalize(path)
@@ -125,22 +135,21 @@ class MountableHypertrie {
         return cb(null, node, this)
       }
       if (node.key === path) return cb(null, node)
-      this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, getFromMount)
+      return this._getSubtrie(path, getFromMount)
     })
 
-    function getFromMount (err, mountNode) {
+    function getFromMount (err, trie, mountInfo) {
       if (err) return cb(err)
-      self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
+      console.log('GOT TRIE FOR MOUNT NODE WITH KEY:', trie.key, 'AND FEED:', trie._trie.feed)
+      return trie.get(pathToMount(path, mountInfo), opts, (err, node, subTrie) => {
         if (err) return cb(err)
-        return trie.get(pathToMount(path, mountInfo), opts, (err, node, subTrie) => {
-          if (err) return cb(err)
-          if (!node) return cb(null, null, subTrie)
-          // TODO: do we need to copy the node here?
-          node.key = pathFromMount(node.key, mountInfo)
-          if (node.key !== path) return cb(null, null, subTrie)
-          if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = subTrie
-          return cb(null, node, subTrie)
-        })
+        console.log('SUBTRIE GET FOR PATH:', pathToMount(path, mountInfo), 'RETURNED:', node)
+        if (!node) return cb(null, null, subTrie)
+        // TODO: do we need to copy the node here?
+        node.key = pathFromMount(node.key, mountInfo)
+        if (node.key !== path) return cb(null, null, subTrie)
+        if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = subTrie
+        return cb(null, node, subTrie)
       })
     }
   }
@@ -155,23 +164,20 @@ class MountableHypertrie {
     this._trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
-        return this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, putIntoMount)
+        return this._getSubtrie(path, putIntoMount)
       }
       return cb(null, inserted)
     })
 
-    function putIntoMount (err, mountNode) {
+    function putIntoMount (err, trie, mountInfo) {
       if (err) return cb(err)
-      self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
+      const mountPath = pathToMount(path, mountInfo)
+      return trie.put(mountPath, value, opts, (err, node) => {
         if (err) return cb(err)
-        const mountPath = pathToMount(path, mountInfo)
-        return trie.put(mountPath, value, opts, (err, node) => {
-          if (err) return cb(err)
-          if (!node) return cb(null, null)
-          // TODO: do we need to copy the node here?
-          node.key = pathFromMount(node.key, mountInfo)
-          return cb(null, node)
-        })
+        if (!node) return cb(null, null)
+        // TODO: do we need to copy the node here?
+        node.key = pathFromMount(node.key, mountInfo)
+        return cb(null, node)
       })
     }
   }
@@ -189,26 +195,23 @@ class MountableHypertrie {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
         console.log('DELETING FROM A SUBTRIE')
-        return this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, delFromMount)
+        return this._getSubtrie(path, delFromMount)
       }
       console.log('DELETED FROM MY TRIE, deleted:', deleted)
       return cb(null, deleted)
     })
 
-    function delFromMount (err, mountNode) {
+    function delFromMount (err, trie, mountInfo) {
       if (err) return cb(err)
-      self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
+      const mountPath = pathToMount(path, mountInfo)
+      console.log('DELETING AT MOUNTPATH:', mountPath, 'path:', path, 'mountInfo:', mountInfo)
+      return trie.del(mountPath, opts, (err, node) => {
         if (err) return cb(err)
-        const mountPath = pathToMount(path, mountInfo)
-        console.log('DELETING AT MOUNTPATH:', mountPath, 'path:', path, 'mountInfo:', mountInfo)
-        return trie.del(mountPath, opts, (err, node) => {
-          if (err) return cb(err)
-          console.log('AFTER DEL, node:', node)
-          if (!node) return cb(null, null)
-          // TODO: do we need to copy the node here?
-          node.key = pathFromMount(node.key, mountInfo)
-          return cb(null, node)
-        })
+        console.log('AFTER DEL, node:', node)
+        if (!node) return cb(null, null)
+        // TODO: do we need to copy the node here?
+        node.key = pathFromMount(node.key, mountInfo)
+        return cb(null, node)
       })
     }
   }
@@ -248,15 +251,12 @@ class MountableHypertrie {
         node[MountableHypertrie.Symbols.TRIE] = self
         if (node.flags ^ Flags.MOUNT) return cb(null, node)
 
-        self._trie.get(p.join(MOUNT_PREFIX, node.key), { hidden: true, closest: true }, (err, mountNode) => {
+        self._getSubtrie(node.key, (err, trie, mountInfo) => {
           if (err) return cb(err)
-          self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
-            if (err) return cb(err)
-            const subPrefix = pathToMount(node.key, mountInfo)
-            sub = trie.iterator(subPrefix, opts)
-            subInfo = mountInfo
-            return cb(null, node)
-          })
+          const subPrefix = pathToMount(node.key, mountInfo)
+          sub = trie.iterator(subPrefix, opts)
+          subInfo = mountInfo
+          return cb(null, node)
         })
       })
     }
