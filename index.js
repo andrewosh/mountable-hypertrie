@@ -140,10 +140,8 @@ class MountableHypertrie {
 
     function getFromMount (err, trie, mountInfo) {
       if (err) return cb(err)
-      console.log('GOT TRIE FOR MOUNT NODE WITH KEY:', trie.key, 'AND FEED:', trie._trie.feed)
       return trie.get(pathToMount(path, mountInfo), opts, (err, node, subTrie) => {
         if (err) return cb(err)
-        console.log('SUBTRIE GET FOR PATH:', pathToMount(path, mountInfo), 'RETURNED:', node)
         if (!node) return cb(null, null, subTrie)
         // TODO: do we need to copy the node here?
         node.key = pathFromMount(node.key, mountInfo)
@@ -190,24 +188,19 @@ class MountableHypertrie {
     const self = this
     const condition = delCondition(path, opts && opts.condition)
   
-    console.log('TOP LEVEL DELETE, path:', path)
     this._trie.del(path, { ...opts, condition, closest: true }, (err, deleted) => {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
-        console.log('DELETING FROM A SUBTRIE')
         return this._getSubtrie(path, delFromMount)
       }
-      console.log('DELETED FROM MY TRIE, deleted:', deleted)
       return cb(null, deleted)
     })
 
     function delFromMount (err, trie, mountInfo) {
       if (err) return cb(err)
       const mountPath = pathToMount(path, mountInfo)
-      console.log('DELETING AT MOUNTPATH:', mountPath, 'path:', path, 'mountInfo:', mountInfo)
       return trie.del(mountPath, opts, (err, node) => {
         if (err) return cb(err)
-        console.log('AFTER DEL, node:', node)
         if (!node) return cb(null, null)
         // TODO: do we need to copy the node here?
         node.key = pathFromMount(node.key, mountInfo)
@@ -341,7 +334,6 @@ function putCondition (path, opts) {
     if (closest && closest.key !== newNode.key && !userClosest) closest = null 
     userCondition(closest, newNode, (err, shouldExecute) => {
       if (err) return cb(err)
-    console.log('SHOULD EXECUTE:', shouldExecute)
       return cb(null, shouldExecute)
     })
   }
@@ -349,14 +341,11 @@ function putCondition (path, opts) {
 
 function delCondition (path, userCondition) {
   return (closest, cb) => {
-    console.log('IN DEL CONDITION, closest:', closest)
     if (closest && (closest.flags & Flags.MOUNT) && (closest.key !== path)) {
       const err = new Error('Operating on a mountpoint')
       err.mountpoint = true
-      console.log('RETURNING MOUTNPOINT ERR')
       return cb(err)
     }
-    console.log('RETURNING TRUE IN DEL CONDITION')
     if (!userCondition) return cb(null, true)
     userCondition(closest, (err, shouldExecute) => {
       if (err) return cb(err)
