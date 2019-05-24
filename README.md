@@ -22,7 +22,7 @@ trie1.get('/a/b/c', console.log) // Will return Buffer.from('hello')
 A mount can be removed by performing a `del` on the mountpoint :
 ```js
 trie1.del('/a', err => {
-  trie1.get('/a/b/c') // Will return `null`
+  trie1.get('/a/b/c', console.log) // Will print `null`
 })
 ```
 ### API
