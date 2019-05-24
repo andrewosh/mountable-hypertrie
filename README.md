@@ -49,6 +49,7 @@ _Note: We're still adding support for many hypertrie methods. Here's what's been
 
 - [x] `get`
 - [x] `put`
+- [x] `del`
 - [ ] `batch`
 - [x] `iterator`
 - [x] `list`
