@@ -4,23 +4,29 @@
 A Hypertrie wrapper that supports mounting of sub-Hypertries.
 
 ### Usage
+A MountableHypertrie can be mounted within another MountableHypertrie by using the `mount` command:
+```js
+const store = corestore(ram)
+const trie1 = new MountableHypertrie(store)
+const trie2 = new MountableHypertrie(store)
 
+trie2.ready(() => {
+  trie1.mount('/a', trie2.key, ...)
+})
+```
+Assuming `trie2` has a value 'hello' at `/b/c`:
+```js
+trie1.get('/a/b/c', console.log) // Will return Buffer.from('hello')
+```
+
+A mount can be removed by performing a `del` on the mountpoint :
+```js
+trie1.del('/a', err => {
+  trie1.get('/a/b/c') // Will return `null`
+})
+```
 ### API
 `mountable-hypertrie` re-exposes the [`hypertrie`](https://github.com/mafintosh/hypertrie) API, with the addition of the following methods (and a different constructor):
-
-_Note: We're still adding support for many hypertrie methods. Here's what's been implemented so far:_
-
-- [ ] `get`
-- [ ] `put`
-- [ ] `batch`
-- [ ] `iterator`
-- [ ] `list`
-- [ ] `createReadStream`
-- [ ] `createWriteStream`
-- [ ] `checkout`
-- [ ] `watch`
-- [ ] `createHistoryStream`
-- [ ] `createDiffStream`
 
 #### `const trie = new MountableHypertrie(corestore, key, opts)`
 `corestore` can be any object that implements the corestore interface. For now, it's recommanded to use [`random-access-corestore`](https://github.com/andrewosh/random-access-corestore)
@@ -28,7 +34,27 @@ _Note: We're still adding support for many hypertrie methods. Here's what's been
 `opts` can contain any `hypertrie` options
 
 #### `trie.mount(path, key, opts, cb)`
-#### `trie.unmount(path, cb)`
+Mount the MountableHypertrie specified by `key` at `path`. `opts` can include:
+```
+{
+  remotePath: '/remote/path', // An optional base path within the mount.
+  version: 1                  // An optional checkout version
+}
+```
+
+_Note: We're still adding support for many hypertrie methods. Here's what's been implemented so far:_
+
+- [x] `get`
+- [x] `put`
+- [ ] `batch`
+- [x] `iterator`
+- [x] `list`
+- [ ] `createReadStream`
+- [ ] `createWriteStream`
+- [ ] `checkout`
+- [x] `watch`
+- [ ] `createHistoryStream`
+- [ ] `createDiffStream`
 
 ### License
 MIT
