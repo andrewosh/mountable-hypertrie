@@ -29,12 +29,15 @@ trie1.del('/a', err => {
 `mountable-hypertrie` re-exposes the [`hypertrie`](https://github.com/mafintosh/hypertrie) API, with the addition of the following methods (and a different constructor):
 
 #### `const trie = new MountableHypertrie(corestore, key, opts)`
-`corestore` can be any object that implements the corestore interface. For now, it's recommanded to use [`random-access-corestore`](https://github.com/andrewosh/random-access-corestore)
-`key` is the hypertrie key
-`opts` can contain any `hypertrie` options
+- `corestore`: any object that implements the corestore interface. For now, it's recommanded to use [`random-access-corestore`](https://github.com/andrewosh/random-access-corestore)
+- `key` is the hypertrie key
+- `opts` can contain any `hypertrie` options
 
 #### `trie.mount(path, key, opts, cb)`
-Mount the MountableHypertrie specified by `key` at `path`. `opts` can include:
+- `path` is the mountpoint
+- `key` is the key for the MountableHypertrie to be mounted at `path`
+
+`opts` can include:
 ```
 {
   remotePath: '/remote/path', // An optional base path within the mount.
