@@ -21,7 +21,7 @@ class MountableHypertrie {
 
     // Set in _ready.
     this._trie = (opts && opts.trie) || hypertrie(null, {
-      feed: this.opts.feed || this.corestore.get({ key: this.key, main: !this.key, ...this.opts }),
+      feed: this.opts.feed || this.corestore.get({ key: this.key, ...this.opts }),
       ...opts
     })
     // TODO: Replace with a LRU cache.
@@ -45,8 +45,9 @@ class MountableHypertrie {
     var versionedTrie = (opts && opts.version) ? this._checkouts.get(`${key}:${opts.version}`) : null
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
-    var trie = this._tries.get(key) || new MountableHypertrie(this.corestore, key, opts)
-    self._tries.set(key, trie)
+    const keyString = key.toString('hex')
+    var trie = this._tries.get(keyString) || new MountableHypertrie(this.corestore, key, opts)
+    self._tries.set(keyString, trie)
 
     if (!trie.opened) {
       trie.ready(err => { if (err) return cb(err)
@@ -57,7 +58,7 @@ class MountableHypertrie {
     function onready () {
       if (!opts || !opts.version) return cb(null, trie)
       versionedTrie = trie.checkout(opts.version)
-      this._checkouts.set(`${key}:${opts.version}`, versionedTrie)
+      this._checkouts.set(`${keyString}:${opts.version}`, versionedTrie)
       return cb(null, versionedTrie)
     }
   }
