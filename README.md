@@ -53,7 +53,7 @@ _Note: We're still adding support for many hypertrie methods. Here's what's been
 - [ ] `batch`
 - [x] `iterator`
 - [x] `list`
-- [ ] `createReadStream`
+- [x] `createReadStream`
 - [ ] `createWriteStream`
 - [ ] `checkout`
 - [x] `watch`
