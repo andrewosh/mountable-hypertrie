@@ -12,6 +12,7 @@ const Flags = {
   MOUNT: 1
 }
 const MOUNT_PREFIX = '/mounts'
+const OWNER = Symbol('mountable-hypertrie-owner')
 
 class MountableHypertrie {
   constructor (corestore, key, opts = {}) {
@@ -24,6 +25,11 @@ class MountableHypertrie {
       feed: this.opts.feed || this.corestore.get({ key: this.key, ...this.opts }),
       ...opts
     })
+
+    // If this trie's feed was instantiated by another hypertrie, reuse it here.
+    if (this._trie.feed[OWNER]) this._trie = this._trie.feed[OWNER]
+    else this._trie.feed[OWNER] = this._trie
+
     // TODO: Replace with a LRU cache.
     this._tries = new Map()
     this._checkouts = new Map()
@@ -50,7 +56,8 @@ class MountableHypertrie {
     self._tries.set(keyString, trie)
 
     if (!trie.opened) {
-      trie.ready(err => { if (err) return cb(err)
+      trie.ready(err => {
+        if (err) return cb(err)
         onready()
       })
     } else process.nextTick(onready)

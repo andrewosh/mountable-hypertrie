@@ -3,4 +3,5 @@ message Mount {
   required string localPath = 2;
   optional uint64 version = 3;
   optional string remotePath = 4;
+  optional bytes hash = 5;
 }
