@@ -83,9 +83,16 @@ class MountableHypertrie {
     })
   }
 
+  _isNormalNode (node) {
+    return node.flags ^ Flags.MOUNT
+  }
+
   _getSubtrie (path, cb) {
     this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
       if (err) return cb(err)
+      if (this._isNormalNode(mountNode) || !path.startsWith(mountNode.key.slice(7))) {
+        return cb(null, this._trie, { localPath: '', remotePath: '' })
+      }
       return this._trieForMountNode(mountNode, cb)
     })
   }
@@ -118,7 +125,7 @@ class MountableHypertrie {
       version: opts && opts.version
     })
     this._trie.batch([
-      { type: 'put', key: p.join(MOUNT_PREFIX, path), hidden: true, value: mountRecord },
+      { type: 'put', key: p.join(MOUNT_PREFIX, path), flags: Flags.MOUNT, hidden: true, value: mountRecord },
       // TODO: empty values going to cause harm here?
       { type: 'put', key: path, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
     ], cb)
@@ -137,7 +144,7 @@ class MountableHypertrie {
     this._trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
       if (!node) return cb(null, null, this)
-      if (node.flags ^ Flags.MOUNT) {
+      if (this._isNormalNode(node)) {
         if (node.key !== path) return cb(null, null, this)
         node[MountableHypertrie.Symbols.TRIE] = this
         return cb(null, node, this)
@@ -221,16 +228,31 @@ class MountableHypertrie {
     if (isOptions(prefix)) return this.iterator('', prefix)
     if (!prefix) prefix = '/'
     prefix = normalize(prefix)
-
     const self = this
 
-    // If the iterator contains nodes in the current trie, then the root will be non-null.
-    let root = this._trie.iterator(prefix, opts)
+    const recursive = !!(opts && opts.recursive)
+    const gt = !!(opts && opts.gt)
+    // gt must always be false in the trie iteration in order to discover mountpoints.
+    if (gt) opts = { ...opts, gt: false}
+
+    // Set in open.
+    let root = null
+    let rootInfo = null
     // If the iterator is currently iterating through a sub-trie, then these will be non-null.
     let sub = null
     let subInfo = null
 
-    return nanoiterator({ next })
+    return nanoiterator({ next, open })
+
+    function open (cb) {
+      self._getSubtrie(prefix, (err, trie, mountInfo) => {
+        if (err) return cb(err)
+        const subPrefix = pathToMount(prefix, mountInfo)
+        root = trie.iterator(subPrefix, opts)
+        rootInfo = mountInfo
+        return cb(null)
+      })
+    }
 
     function next (cb) {
       if (sub) {
@@ -242,7 +264,7 @@ class MountableHypertrie {
           }
           node.key = pathFromMount(node.key, subInfo)
           if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = sub
-          return cb(null, node)
+          return prereturn(node, cb)
         })
       }
       root.next((err, node) => {
@@ -250,16 +272,23 @@ class MountableHypertrie {
         if (!node) return cb(null, null)
 
         node[MountableHypertrie.Symbols.TRIE] = self
-        if (node.flags ^ Flags.MOUNT) return cb(null, node)
+        if (self._isNormalNode(node)) return prereturn(node, cb)
+        else if (!recursive && node.key !== prefix) return prereturn(node, cb)
 
         self._getSubtrie(node.key, (err, trie, mountInfo) => {
           if (err) return cb(err)
           const subPrefix = pathToMount(node.key, mountInfo)
           sub = trie.iterator(subPrefix, opts)
           subInfo = mountInfo
-          return cb(null, node)
+          return prereturn(node, cb)
         })
       })
+    }
+
+    function prereturn (node, cb) {
+      if (gt && node.key === prefix) return next(cb)
+      node.key = pathFromMount(node.key, rootInfo)
+      return cb(null, node)
     }
   }
 
@@ -305,8 +334,7 @@ class MountableHypertrie {
         this._trieForMountNode(mountNode, (err, trie, mountInfo) => {
           if (err) return rootWatcher.emit('error', err)
           watchers.push(trie.watch(pathToMount(path, mountInfo), onchange))
-        })
-      }
+        })}
     })
     const destroy = rootWatcher.destroy.bind(rootWatcher)
     rootWatcher.destroy = function () {

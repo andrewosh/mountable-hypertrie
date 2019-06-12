@@ -45,7 +45,7 @@ test('one-level nested iterator', async t => {
       cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
       cb => rootTrie.mount('d', dTrie.key, { value: 'd' }, cb),
       cb => {
-        all(rootTrie.iterator(), (err, map) => {
+        all(rootTrie.iterator({ recursive: true }), (err, map) => {
           t.error(err, 'no error')
           t.same(map, expected, 'iterated all values')
           return cb(null)
@@ -74,7 +74,7 @@ test('multi-level nested iterator', async t => {
       cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
       cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
       cb => {
-        all(rootTrie.iterator(), (err, map) => {
+        all(rootTrie.iterator({ recursive: true }), (err, map) => {
           t.error(err, 'no error')
           t.same(map, expected, 'iterated all values')
           return cb(null)
@@ -103,7 +103,7 @@ test('list iterator', async t => {
       cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
       cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
       cb => {
-        rootTrie.list((err, l) => {
+        rootTrie.list({ recursive: true }, (err, l) => {
           t.error(err, 'no error')
           const res = l.reduce((acc, node) => { acc[node.key] = node.value.toString('utf8'); return acc }, {})
           t.same(res, expected, 'listed all values')
@@ -143,7 +143,7 @@ test('iterator nodes reference correct sub-tries', async t => {
       cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
       cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
       cb => {
-        rootTrie.list((err, l) => {
+        rootTrie.list({ recursive: true }, (err, l) => {
           t.error(err, 'no error')
           const res = l.reduce((acc, node) => {
             acc[node.key] = node[MountableHypertrie.Symbols.TRIE].key
@@ -160,6 +160,75 @@ test('iterator nodes reference correct sub-tries', async t => {
 
   t.end()
 
+})
+
+test('non-recursive cross-trie iterator with gt opt', async t => {
+  const { tries } = await create(3)
+  const [rootTrie, aTrie, abTrie] = tries
+
+  const aVals = ['a/.key', 'a/b', 'a/c']
+  const abVals = ['a/b/c', 'a/b/d']
+  const aExpected = toMap(aVals)
+  const abExpected = toMap(abVals)
+
+  try {
+    await put(rootTrie, ['b', 'c', 'e'])
+    await put(aTrie, ['.key', 'c'], 'a/')
+    await put(abTrie, ['c', 'd'], 'a/b/')
+    await runAll([
+      cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
+      cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
+      cb => {
+        rootTrie.list('a', { recursive: false, gt: true }, (err, l) => {
+          t.error(err, 'no error')
+          const res = l.reduce((acc, node) => { acc[node.key] = node.value.toString('utf8'); return acc }, {})
+          t.same(res, aExpected, 'listed all values')
+          return cb(null)
+        })
+      },
+      cb => {
+        rootTrie.list('a/b', { recursive: false, gt: true }, (err, l) => {
+          t.error(err, 'no error')
+          const res = l.reduce((acc, node) => { acc[node.key] = node.value.toString('utf8'); return acc }, {})
+          t.same(res, abExpected, 'listed all values')
+          return cb(null)
+        })
+      },
+    ])
+  } catch (err) {
+    t.error(err)
+  }
+
+  t.end()
+})
+
+test('iterator fully enclosed by mount', async t => {
+  const { tries } = await create(3)
+  const [rootTrie, aTrie, dTrie] = tries
+
+  const vals = ['a/a', 'a/b']
+  const expected = toMap(vals)
+
+  try {
+    await put(rootTrie, ['b', 'c'])
+    await put(aTrie, ['a', 'b'], 'a/')
+    await put(dTrie, ['e', 'f'], 'd/')
+    await runAll([
+      cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
+      cb => rootTrie.mount('d', dTrie.key, { value: 'd' }, cb),
+      cb => {
+        all(rootTrie.iterator('a'), (err, map) => {
+          t.error(err, 'no error')
+          t.same(map, expected, 'iterated all values')
+          return cb(null)
+        })
+      }
+    ])
+  } catch (err) {
+    t.error(err)
+  }
+
+  t.end()
 })
 
 // Duplicated from hypertrie.
