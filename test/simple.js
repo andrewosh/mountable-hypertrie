@@ -5,15 +5,72 @@ const { runAll } = require('./helpers/util')
 
 const MountableHypertrie = require('..')
 
-test('simple cross-trie put/get', async t => {
+test('simple single-trie get', async t => {
   const { tries, cores, store } = await create(2)
+  const [trie] = tries
+
+  try {
+    await runAll([
+      cb => trie.put('/a', 'hello', cb),
+      cb => {
+        trie.get('/a', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          t.end()
+        })
+      }
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
+test('simple two-trie get', async t => {
+  const { tries, cores, stores } = await create(3)
+  const [trie1, trie2, trie3] = tries
+
+  try {
+    await runAll([
+      cb => trie3.put('/c', 'hello', cb),
+      cb => trie2.mount('/b', trie3.key, cb),
+      cb => trie1.mount('/a', trie2.key, cb),
+      cb => {
+        trie1.get('/a/b/c', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          t.end()
+        })
+      }
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
+test.only('simple cross-trie get', async t => {
+  const { tries, cores, stores } = await create(2)
   const [rootTrie, subTrie] = tries
 
   try {
     await runAll([
       cb => rootTrie.mount('/a', subTrie.key, cb),
       cb => rootTrie.put('/b', 'hello', cb),
-      cb => rootTrie.put('/a/b', 'goodbye', cb),
+      cb => subTrie.put('/b', 'goodbye', cb),
+      cb => setTimeout(cb, 1000),
+      cb => {
+        for (let i = 0; i < stores.length; i++) {
+          const store = stores[i]
+          console.log(`STORE ${i + 1} INFO`, store.getInfo())
+        }
+        return process.nextTick(cb, null)
+      },
+      cb => {
+        console.log('SUBTRIE KEY:', subTrie.key.toString('hex'))
+        rootTrie._tries.get(subTrie.key.toString('hex'))._trie.feed.get(1, (err, block) => {
+          console.log('BLOCK:', block, 'ERR:', err)
+          return cb(null)
+        })
+      },
       cb => rootTrie.get('/a/b', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -21,6 +78,7 @@ test('simple cross-trie put/get', async t => {
         t.same(node.value, Buffer.from('goodbye'))
         return cb(null)
       }),
+      /*
       cb => rootTrie.get('/b', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -35,6 +93,7 @@ test('simple cross-trie put/get', async t => {
         t.same(node.value, Buffer.from('goodbye'))
         return cb(null)
       })
+      */
     ])
   } catch (err) {
     t.error(err)

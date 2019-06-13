@@ -5,13 +5,44 @@ const ram = require('random-access-memory')
 const MountableHypertrie = require('../..')
 
 module.exports.create = async function (numTries, opts) {
-  const store = corestore(ram)
+  const sparse = false
   const tries = []
+  const stores = []
+
   for (let i = 0; i < numTries; i++) {
-    const core = store.get({ name: `trie-${i}` })
-    const trie = new MountableHypertrie(store, null, { ...opts, feed: core })
+    const store = corestore(ram, { sparse })
+    const trie = new MountableHypertrie(store, null, { ...opts, sparse })
     await promisify(trie.ready)()
     tries.push(trie)
+    stores.push(store)
   }
-  return { tries, store }
+
+  const streams = replicateAll(tries, { sparse, live: true, encrypt: false })
+
+  return { tries, stores, streams }
+}
+
+function replicateAll (tries, opts) {
+  const streams = []
+  const replicated = new Set()
+
+  for (let i = 0; i < tries.length; i++) {
+    for (let j = 0; j < tries.length; j++) {
+      if (i === j || replicated.has(j)) continue
+      const source = tries[i]
+      const dest = tries[j]
+
+      const s1 = source.replicate({ ...opts })
+      const s2 = dest.replicate({ ...opts })
+      streams.push([s1, s2])
+
+      s1.on('data', d => console.log(`${i + 1} STREAM DATA:`, d))
+      s2.on('data', d => console.log(`${j + 1} STREAM DATA:`, d))
+      s1.on('error', err => console.error('STREAM ERROR:', err))
+      s1.pipe(s2).pipe(s1)
+
+    } replicated.add(i)
+  }
+  console.log('STREAMS LENGTH:', streams.length)
+  return streams
 }

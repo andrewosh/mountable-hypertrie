@@ -22,8 +22,8 @@ class MountableHypertrie {
 
     // Set in _ready.
     this._trie = (opts && opts.trie) || hypertrie(null, {
-      feed: this.opts.feed || this.corestore.get({ key: this.key, ...this.opts }),
-      ...opts
+      ...opts,
+      feed: this.opts.feed || this.corestore.default({ key, ...this.opts })
     })
 
     // If this trie's feed was instantiated by another hypertrie, reuse it here.
@@ -41,6 +41,7 @@ class MountableHypertrie {
     this._trie.ready(err => {
       if (err) return cb(err)
       this.key = this._trie.key
+      //console.log('TRIE IS READY')
       return cb(null)
     })
   }
@@ -52,7 +53,12 @@ class MountableHypertrie {
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
     const keyString = key.toString('hex')
-    var trie = this._tries.get(keyString) || new MountableHypertrie(this.corestore, key, opts)
+    const subfeed = this.corestore.get({ key, ...opts, ...this.opts })
+    var trie = this._tries.get(keyString) || new MountableHypertrie(this.corestore, key, {
+      ...this.opts,
+      ...opts,
+      feed: subfeed
+    })
     self._tries.set(keyString, trie)
 
     if (!trie.opened) {
@@ -79,20 +85,26 @@ class MountableHypertrie {
     }
     this._createHypertrie(mountInfo.key, { version: mountInfo.version }, (err, trie) => {
       if (err) return cb(err)
+      //console.log('trie:', trie)
       return cb(null, trie, mountInfo)
     })
   }
 
   _isNormalNode (node) {
+    if (!node) return true
     return node.flags ^ Flags.MOUNT
   }
 
   _getSubtrie (path, cb) {
     this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
+      //console.log('IN GET SUBTRIE, MOUNTNODE:', mountNode, 'ERR:', err)
       if (err) return cb(err)
+      //console.log('IN GET SUBTRIE, path:', path)
       if (this._isNormalNode(mountNode) || !path.startsWith(mountNode.key.slice(7))) {
+        //console.log('ITS A NORMAL NODE, this._trie:', this._trie)
         return cb(null, this._trie, { localPath: '', remotePath: '' })
       }
+      //console.log('LOADING TRIE FOR MOUNT NODE:', path)
       return this._trieForMountNode(mountNode, cb)
     })
   }
@@ -128,21 +140,28 @@ class MountableHypertrie {
       { type: 'put', key: p.join(MOUNT_PREFIX, path), flags: Flags.MOUNT, hidden: true, value: mountRecord },
       // TODO: empty values going to cause harm here?
       { type: 'put', key: path, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
-    ], cb)
+    ], err => {
+      if (err) return cb(err)
+      return this.loadMount(path, cb)
+    })
   }
 
   loadMount (path, cb) {
+    console.log('LOADING MOUNT FOR PATH:', path)
     return this._getSubtrie(path, cb)
   }
 
   get (path, opts, cb) {
+    //console.log('GETTING PATH:', path)
     if (typeof opts === 'function') return this.get(path, null, opts)
     path = normalize(path)
 
     const self = this
 
+    //console.log('this._trie here:', this._trie)
     this._trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
+      //console.log('GOT A NODE:', node, 'this._trie:', this._trie)
       if (!node) return cb(null, null, this)
       if (this._isNormalNode(node)) {
         if (node.key !== path) return cb(null, null, this)
@@ -154,9 +173,12 @@ class MountableHypertrie {
     })
 
     function getFromMount (err, trie, mountInfo) {
+      //console.log('ERR HERE:', err, 'mountInfo:', mountInfo)
       if (err) return cb(err)
+      //console.log('GETTING FROM MOUNT:', mountInfo)
       return trie.get(pathToMount(path, mountInfo), opts, (err, node, subTrie) => {
         if (err) return cb(err)
+        subTrie = subTrie || self
         if (!node) return cb(null, null, subTrie)
         // TODO: do we need to copy the node here?
         node.key = pathFromMount(node.key, mountInfo)
@@ -174,6 +196,7 @@ class MountableHypertrie {
     const self = this
     const condition = putCondition(path, opts)
 
+    //console.log('PUTTING AT:', path, 'IN TRIE:', this._trie)
     this._trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
@@ -202,7 +225,7 @@ class MountableHypertrie {
 
     const self = this
     const condition = delCondition(path, opts && opts.condition)
-  
+
     this._trie.del(path, { ...opts, condition, closest: true }, (err, deleted) => {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
