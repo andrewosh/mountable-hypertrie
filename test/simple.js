@@ -6,7 +6,7 @@ const { runAll } = require('./helpers/util')
 const MountableHypertrie = require('..')
 
 test('simple single-trie get', async t => {
-  const { tries, cores, store } = await create(2)
+  const { tries, cores, store } = await create(1)
   const [trie] = tries
 
   try {
@@ -271,5 +271,39 @@ test('recursive get node references the correct sub-trie', async t => {
   }
 
   t.end()
+})
+
+test('get on a checkout', async t => {
+  const { tries, cores, store } = await create(1)
+  const [trie] = tries
+
+  var checkout = null
+
+  try {
+    await runAll([
+      cb => trie.put('/a', 'hello', cb),
+      cb => {
+        const version = trie.version
+        checkout = trie.checkout(version)
+        return cb(null)
+      },
+      cb => trie.del('/a', cb),
+      cb => {
+        trie.get('/a', (err, node) => {
+          t.same(node, null)
+          return cb(null)
+        })
+      },
+      cb => {
+        checkout.get('/a', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          t.end()
+        })
+      }
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
 })
 

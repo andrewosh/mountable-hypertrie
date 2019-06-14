@@ -19,16 +19,19 @@ class MountableHypertrie {
     this.corestore = corestore
     this.key = key
     this.opts = opts
+    this.sparse = opts.sparse !== false
 
-    // Set in _ready.
-    this._trie = (opts && opts.trie) || hypertrie(null, {
+    this._trie = opts.trie || hypertrie(null, {
       ...opts,
-      feed: this.opts.feed || this.corestore.default({ key, ...this.opts })
+      feed: this.opts.feed || this.corestore.default({ key, ...this.opts }),
     })
-
-    // If this trie's feed was instantiated by another hypertrie, reuse it here.
-    if (this._trie.feed[OWNER]) this._trie = this._trie.feed[OWNER]
-    else this._trie.feed[OWNER] = this._trie
+    if (opts.version) this._trie = this._trie.checkout(opts.version)
+    if (!opts.version) {
+      // If this is a checkout, it will never be writable.
+      // If this trie's feed was instantiated by another hypertrie, reuse it here.
+      if (this._trie.feed[OWNER]) this._trie = this._trie.feed[OWNER]
+      else this._trie.feed[OWNER] = this._trie
+    }
 
     // TODO: Replace with a LRU cache.
     this._tries = new Map()
@@ -38,11 +41,36 @@ class MountableHypertrie {
   }
 
   _ready (cb) {
-    this._trie.ready(err => {
+    this._trieReady(this._trie, true, err => {
       if (err) return cb(err)
       this.key = this._trie.key
       return cb(null)
     })
+  }
+
+  _trieReady (trie, root, cb) {
+    const self = this
+
+    trie.ready(err => {
+      if (err) return cb(err)
+      update(trie.feed)
+    })
+
+    function update (feed) {
+      if (self.sparse) {
+        // TODO: This is a hack that should be moved into hypercore
+        feed.update(function loop () {
+          feed.update(loop)
+        })
+      }
+      if (feed.length === 0 && !root) {
+        return feed.update(1, err => {
+          if (err) return cb(err)
+          return cb(null)
+        })
+      }
+      return cb(null)
+    }
   }
 
   _createHypertrie (key, opts, cb) {
@@ -56,7 +84,8 @@ class MountableHypertrie {
     var trie = this._tries.get(keyString) || new MountableHypertrie(this.corestore, key, {
       ...this.opts,
       ...opts,
-      feed: subfeed
+      feed: subfeed,
+      sparse: this.sparse
     })
     self._tries.set(keyString, trie)
 
@@ -75,12 +104,10 @@ class MountableHypertrie {
     }
 
     function ontrie (trie) {
-      if (subfeed.length === 0) {
-        return subfeed.update(1, err => {
-          return cb(null, trie)
-        })
-      }
-      return cb(null, trie)
+      self._trieReady(trie._trie, false, err => {
+        if (err) return cb(err)
+        return cb(null, trie)
+      })
     }
   }
 
@@ -333,10 +360,9 @@ class MountableHypertrie {
   }
 
   checkout (version) {
-    if (version === 0) version = 1
     return new MountableHypertrie(this.corestore, null, {
       trie: this._trie,
-      checkout: version || 1,
+      version: version || 1,
       ...this.opts
     })
   }
