@@ -36,13 +36,9 @@ function replicateAll (tries, opts) {
       const s2 = dest.replicate({ ...opts })
       streams.push([s1, s2])
 
-      s1.on('data', d => console.log(`${i + 1} STREAM DATA:`, d))
-      s2.on('data', d => console.log(`${j + 1} STREAM DATA:`, d))
-      s1.on('error', err => console.error('STREAM ERROR:', err))
       s1.pipe(s2).pipe(s1)
 
     } replicated.add(i)
   }
-  console.log('STREAMS LENGTH:', streams.length)
   return streams
 }

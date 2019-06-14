@@ -47,7 +47,7 @@ test('simple two-trie get', async t => {
   }
 })
 
-test.only('simple cross-trie get', async t => {
+test('simple cross-trie get', async t => {
   const { tries, cores, stores } = await create(2)
   const [rootTrie, subTrie] = tries
 
@@ -56,21 +56,6 @@ test.only('simple cross-trie get', async t => {
       cb => rootTrie.mount('/a', subTrie.key, cb),
       cb => rootTrie.put('/b', 'hello', cb),
       cb => subTrie.put('/b', 'goodbye', cb),
-      cb => setTimeout(cb, 1000),
-      cb => {
-        for (let i = 0; i < stores.length; i++) {
-          const store = stores[i]
-          console.log(`STORE ${i + 1} INFO`, store.getInfo())
-        }
-        return process.nextTick(cb, null)
-      },
-      cb => {
-        console.log('SUBTRIE KEY:', subTrie.key.toString('hex'))
-        rootTrie._tries.get(subTrie.key.toString('hex'))._trie.feed.get(1, (err, block) => {
-          console.log('BLOCK:', block, 'ERR:', err)
-          return cb(null)
-        })
-      },
       cb => rootTrie.get('/a/b', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -78,7 +63,6 @@ test.only('simple cross-trie get', async t => {
         t.same(node.value, Buffer.from('goodbye'))
         return cb(null)
       }),
-      /*
       cb => rootTrie.get('/b', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -93,7 +77,6 @@ test.only('simple cross-trie get', async t => {
         t.same(node.value, Buffer.from('goodbye'))
         return cb(null)
       })
-      */
     ])
   } catch (err) {
     t.error(err)
@@ -110,7 +93,7 @@ test('simple cross-trie del', async t => {
     await runAll([
       cb => rootTrie.mount('/a', subTrie.key, cb),
       cb => rootTrie.put('/b', 'hello', cb),
-      cb => rootTrie.put('/a/b', 'goodbye', cb),
+      cb => subTrie.put('/b', 'goodbye', cb),
       cb => rootTrie.get('/a/b', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -129,7 +112,7 @@ test('simple cross-trie del', async t => {
         t.same(node.key, 'b')
         return cb(null)
       }),
-      cb => rootTrie.del('/a/b', cb),
+      cb => subTrie.del('/b', cb),
       cb => rootTrie.get('/a/b', (err, node) => {
         if (err) return cb(err)
         t.false(node)
@@ -164,8 +147,8 @@ test('recursive cross-trie put/get', async t => {
       cb => subTrie.mount('/b', subsubTrie.key, cb),
       cb => rootTrie.put('/b', 'hello', cb),
       cb => subTrie.put('/c', 'dog', cb),
-      cb => rootTrie.put('/a/d', 'goodbye', cb),
-      cb => rootTrie.put('/a/b/d', 'cat', cb),
+      cb => subTrie.put('/d', 'goodbye', cb),
+      cb => subsubTrie.put('/d', 'cat', cb),
       cb => rootTrie.get('/a/d', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -205,17 +188,17 @@ test('recursive cross-trie del', async t => {
       cb => subTrie.mount('/b', subsubTrie.key, cb),
       cb => rootTrie.put('/b', 'hello', cb),
       cb => subTrie.put('/c', 'dog', cb),
-      cb => rootTrie.put('/a/d', 'goodbye', cb),
-      cb => rootTrie.put('/a/b/d', 'cat', cb),
-      cb => rootTrie.put('/a/b/e', 'walrus', cb),
-      cb => rootTrie.put('/a/c', 'potato', cb),
-      cb => rootTrie.put('/a/e', 'cat', cb),
-      cb => rootTrie.put('/a/b/f', 'horse', cb),
+      cb => subTrie.put('/d', 'goodbye', cb),
+      cb => subsubTrie.put('/d', 'cat', cb),
+      cb => subsubTrie.put('/e', 'walrus', cb),
+      cb => subTrie.put('/c', 'potato', cb),
+      cb => subTrie.put('/e', 'cat', cb),
+      cb => subsubTrie.put('/f', 'horse', cb),
       cb => rootTrie.put('/d', 'calculator', cb),
       cb => rootTrie.del('/d', cb),
-      cb => rootTrie.del('/a/b/e', cb),
-      cb => rootTrie.del('/a/d', cb),
-      cb => rootTrie.get('/a/d', (err, node) => {
+      cb => subsubTrie.del('/e', cb),
+      cb => subTrie.del('/d', cb),
+      cb => subTrie.get('/d', (err, node) => {
         if (err) return cb(err)
         t.false(node)
         return cb(null)
@@ -262,8 +245,8 @@ test('recursive get node references the correct sub-trie', async t => {
       cb => subTrie.mount('/b', subsubTrie.key, cb),
       cb => rootTrie.put('/b', 'hello', cb),
       cb => subTrie.put('/c', 'dog', cb),
-      cb => rootTrie.put('/a/d', 'goodbye', cb),
-      cb => rootTrie.put('/a/b/d', 'cat', cb),
+      cb => subTrie.put('/d', 'goodbye', cb),
+      cb => subsubTrie.put('/d', 'cat', cb),
       cb => rootTrie.get('/a/d', (err, node) => {
         if (err) return cb(err)
         t.true(node)

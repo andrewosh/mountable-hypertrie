@@ -41,7 +41,6 @@ class MountableHypertrie {
     this._trie.ready(err => {
       if (err) return cb(err)
       this.key = this._trie.key
-      //console.log('TRIE IS READY')
       return cb(null)
     })
   }
@@ -64,15 +63,24 @@ class MountableHypertrie {
     if (!trie.opened) {
       trie.ready(err => {
         if (err) return cb(err)
-        onready()
+        return onready()
       })
     } else process.nextTick(onready)
 
     function onready () {
-      if (!opts || !opts.version) return cb(null, trie)
+      if (!opts || !opts.version) return ontrie(trie)
       versionedTrie = trie.checkout(opts.version)
       this._checkouts.set(`${keyString}:${opts.version}`, versionedTrie)
-      return cb(null, versionedTrie)
+      return ontrie(versionedTrie)
+    }
+
+    function ontrie (trie) {
+      if (subfeed.length === 0) {
+        return subfeed.update(1, err => {
+          return cb(null, trie)
+        })
+      }
+      return cb(null, trie)
     }
   }
 
@@ -85,7 +93,6 @@ class MountableHypertrie {
     }
     this._createHypertrie(mountInfo.key, { version: mountInfo.version }, (err, trie) => {
       if (err) return cb(err)
-      //console.log('trie:', trie)
       return cb(null, trie, mountInfo)
     })
   }
@@ -97,14 +104,10 @@ class MountableHypertrie {
 
   _getSubtrie (path, cb) {
     this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
-      //console.log('IN GET SUBTRIE, MOUNTNODE:', mountNode, 'ERR:', err)
       if (err) return cb(err)
-      //console.log('IN GET SUBTRIE, path:', path)
       if (this._isNormalNode(mountNode) || !path.startsWith(mountNode.key.slice(7))) {
-        //console.log('ITS A NORMAL NODE, this._trie:', this._trie)
         return cb(null, this._trie, { localPath: '', remotePath: '' })
       }
-      //console.log('LOADING TRIE FOR MOUNT NODE:', path)
       return this._trieForMountNode(mountNode, cb)
     })
   }
@@ -140,28 +143,21 @@ class MountableHypertrie {
       { type: 'put', key: p.join(MOUNT_PREFIX, path), flags: Flags.MOUNT, hidden: true, value: mountRecord },
       // TODO: empty values going to cause harm here?
       { type: 'put', key: path, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
-    ], err => {
-      if (err) return cb(err)
-      return this.loadMount(path, cb)
-    })
+    ], cb)
   }
 
   loadMount (path, cb) {
-    console.log('LOADING MOUNT FOR PATH:', path)
     return this._getSubtrie(path, cb)
   }
 
   get (path, opts, cb) {
-    //console.log('GETTING PATH:', path)
     if (typeof opts === 'function') return this.get(path, null, opts)
     path = normalize(path)
 
     const self = this
 
-    //console.log('this._trie here:', this._trie)
     this._trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
-      //console.log('GOT A NODE:', node, 'this._trie:', this._trie)
       if (!node) return cb(null, null, this)
       if (this._isNormalNode(node)) {
         if (node.key !== path) return cb(null, null, this)
@@ -173,9 +169,7 @@ class MountableHypertrie {
     })
 
     function getFromMount (err, trie, mountInfo) {
-      //console.log('ERR HERE:', err, 'mountInfo:', mountInfo)
       if (err) return cb(err)
-      //console.log('GETTING FROM MOUNT:', mountInfo)
       return trie.get(pathToMount(path, mountInfo), opts, (err, node, subTrie) => {
         if (err) return cb(err)
         subTrie = subTrie || self
@@ -196,7 +190,6 @@ class MountableHypertrie {
     const self = this
     const condition = putCondition(path, opts)
 
-    //console.log('PUTTING AT:', path, 'IN TRIE:', this._trie)
     this._trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
