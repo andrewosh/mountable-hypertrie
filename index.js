@@ -1,4 +1,4 @@
-const p = require('path')
+const p = require('path').posix
 const hypertrie = require('hypertrie')
 const thunky = require('thunky')
 const nanoiterator = require('nanoiterator')
