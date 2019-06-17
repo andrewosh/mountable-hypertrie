@@ -21,6 +21,8 @@ class MountableHypertrie {
     this.opts = opts
     this.sparse = opts.sparse !== false
 
+    if (opts.valueEncoding) throw new Error('MountableHypertrie does not currently support the valueEncoding opt.')
+
     this._trie = opts.trie || hypertrie(null, {
       ...opts,
       feed: this.opts.feed || this.corestore.default({ key, ...this.opts }),
