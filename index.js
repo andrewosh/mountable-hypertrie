@@ -65,7 +65,7 @@ class MountableHypertrie {
           feed.update(loop)
         })
       }
-      if (feed.length === 0 && !root) {
+      if (feed.length === 0 && feed.remoteLength > 0 && !root) {
         return feed.update(1, err => {
           if (err) return cb(err)
           return cb(null)
