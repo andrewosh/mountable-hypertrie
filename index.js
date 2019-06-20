@@ -66,7 +66,8 @@ class MountableHypertrie {
         })
       }
       if (feed.length === 0 && !root) {
-        return feed.update(1, err => {
+        // TODO: Better way to check if the feed's available on the network.
+        return feed.get(0, { timeout: 200 }, err => {
           if (err) return cb(err)
           return cb(null)
         })
