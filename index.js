@@ -168,11 +168,19 @@ class MountableHypertrie {
       remotePath: opts && opts.remotePath && normalize(opts.remotePath),
       version: opts && opts.version
     })
-    this._trie.batch([
-      { type: 'put', key: p.join(MOUNT_PREFIX, path), flags: Flags.MOUNT, hidden: true, value: mountRecord },
-      // TODO: empty values going to cause harm here?
-      { type: 'put', key: path, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
-    ], cb)
+
+    this._getSubtrie(path, (err, trie, mountInfo) => {
+      if (err) return cb(err)
+      const innerPath = pathToMount(path, mountInfo)
+      if (!mountInfo.localPath) {
+        return trie.batch([
+          { type: 'put', key: p.join(MOUNT_PREFIX, innerPath), flags: Flags.MOUNT, hidden: true, value: mountRecord },
+          // TODO: empty values going to cause harm here?
+          { type: 'put', key: innerPath, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
+        ], cb)
+      }
+      return trie.mount(innerPath, key, opts, cb)
+    })
   }
 
   loadMount (path, cb) {
@@ -283,6 +291,7 @@ class MountableHypertrie {
     // Set in open.
     let root = null
     let rootInfo = null
+
     // If the iterator is currently iterating through a sub-trie, then these will be non-null.
     let sub = null
     let subInfo = null
