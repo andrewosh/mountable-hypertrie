@@ -65,7 +65,7 @@ class MountableHypertrie {
           feed.update(loop)
         })
       }
-      if (feed.length === 0 && feed.remoteLength > 0 && !root) {
+      if (feed.length === 0 && !root) {
         return feed.update(1, err => {
           if (err) return cb(err)
           return cb(null)
@@ -82,7 +82,7 @@ class MountableHypertrie {
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
     const keyString = key.toString('hex')
-    const subfeed = this.corestore.get({ key, ...opts, ...this.opts })
+    const subfeed = this.corestore.get({ key, ...opts })
     var trie = this._tries.get(keyString) || new MountableHypertrie(this.corestore, key, {
       ...this.opts,
       ...opts,
