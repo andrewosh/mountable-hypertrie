@@ -68,7 +68,7 @@ class MountableHypertrie {
       if (feed.length === 0 && !root) {
         // TODO: Better way to check if the feed's available on the network.
         return feed.get(0, { timeout: 200 }, err => {
-          if (err) return cb(err)
+          if (err && err.code !== 'ETIMEDOUT') return cb(err)
           return cb(null)
         })
       }
@@ -83,7 +83,7 @@ class MountableHypertrie {
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
     const keyString = key.toString('hex')
-    const subfeed = this.corestore.get({ key, ...opts })
+    const subfeed = this.corestore.get({ ...opts, key, discoverable: true })
     var trie = this._tries.get(keyString) || new MountableHypertrie(this.corestore, key, {
       ...this.opts,
       ...opts,
