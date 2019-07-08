@@ -23,9 +23,14 @@ class MountableHypertrie {
 
     if (opts.valueEncoding) throw new Error('MountableHypertrie does not currently support the valueEncoding opt.')
 
+    var feed = this.opts.feed
+    if (!feed) {
+      if (!opts.secretKey) feed = this.corestore.default({ key, ...this.opts })
+      feed = this.corestore.get({ key, discoverable: true, ...this.opts })
+    }
     this._trie = opts.trie || hypertrie(null, {
       ...opts,
-      feed: this.opts.feed || this.corestore.default({ key, ...this.opts }),
+      feed
     })
     if (opts.version) this._trie = this._trie.checkout(opts.version)
     if (!opts.version) {
@@ -65,14 +70,10 @@ class MountableHypertrie {
           feed.update(loop)
         })
       }
-      if (feed.length === 0 && !root) {
-        // TODO: Better way to check if the feed's available on the network.
-        return feed.get(0, { timeout: 200 }, err => {
-          if (err && err.code !== 'ETIMEDOUT') return cb(err)
-          return cb(null)
-        })
-      }
-      return cb(null)
+      if (feed.length !== 0) return cb(null)
+      return feed.update({ ifAvailable: true }, err => {
+        return cb(null)
+      })
     }
   }
 
@@ -135,7 +136,8 @@ class MountableHypertrie {
   _getSubtrie (path, cb) {
     this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
       if (err) return cb(err)
-      if (this._isNormalNode(mountNode) || !path.startsWith(mountNode.key.slice(7))) {
+      const mountPath = mountNode && mountNode.key.slice(7)
+      if (this._isNormalNode(mountNode) || p.relative(mountPath, path).startsWith('..')) {
         return cb(null, this._trie, { localPath: '', remotePath: '' })
       }
       return this._trieForMountNode(mountNode, cb)

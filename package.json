@@ -4,7 +4,8 @@
   "description": "A Hypertrie wrapper that supports mounting of other Hypertries",
   "main": "index.js",
   "scripts": {
-    "test": "tape test/*.js"
+    "test": "tape test/*.js",
+    "build": "protocol-buffers -o lib/messages.js schema.proto"
   },
   "repository": {
     "type": "git",
@@ -32,6 +33,7 @@
     "hypertrie": "^3.6.0",
     "is-options": "^1.0.1",
     "nanoiterator": "^1.2.0",
+    "protocol-buffers": "^4.1.0",
     "protocol-buffers-encodings": "^1.1.0",
     "unixify": "^1.0.0"
   }
