@@ -186,6 +186,19 @@ class MountableHypertrie {
     })
   }
 
+  unmount (path, cb) {
+    path = normalize(path)
+
+    return this._getSubtrie(p.dirname(path), (err, trie, mountInfo) => {
+      if (err) return cb(err)
+      const innerPath = pathToMount(path, mountInfo)
+      return trie.batch([
+        { type: 'del', key: p.join(MOUNT_PREFIX, innerPath), hidden: true },
+        { type: 'del', key: innerPath }
+      ], cb)
+    })
+  }
+
   loadMount (path, cb) {
     return this._getSubtrie(path, cb)
   }

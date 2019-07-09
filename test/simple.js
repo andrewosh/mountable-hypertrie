@@ -307,3 +307,38 @@ test('get on a checkout', async t => {
   }
 })
 
+test('delete a mount', async t => {
+  const { tries, cores, stores } = await create(3)
+  const [trie1, trie2, trie3] = tries
+
+  try {
+    await runAll([
+      cb => trie3.put('/c', 'hello', cb),
+      cb => trie2.mount('/b', trie3.key, cb),
+      cb => trie1.mount('/a', trie2.key, cb),
+      cb => {
+        trie1.get('/a/b/c', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          return cb(null)
+        })
+      },
+      cb => {
+        trie1.unmount('/a', err => {
+          t.error(err, 'no error')
+          return cb(null)
+        })
+      },
+      cb => {
+        trie1.get('/a/b/c', (err, node) => {
+          t.error(err, 'no error')
+          t.false(node)
+          t.end()
+        })
+      }
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
