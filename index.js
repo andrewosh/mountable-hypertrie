@@ -71,8 +71,7 @@ class MountableHypertrie {
         })
       }
       if (feed.length !== 0) return cb(null)
-      return feed.update({ hash: false, ifAvailable: true }, err => {
-        if (err) return cb(err)
+      return feed.update({ hash: false, ifAvailable: true }, () => {
         return cb(null)
       })
     }
