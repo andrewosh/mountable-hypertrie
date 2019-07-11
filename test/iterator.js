@@ -122,7 +122,6 @@ test('iterator nodes reference correct sub-tries', async t => {
   const { tries } = await create(3)
   const [rootTrie, aTrie, abTrie] = tries
 
-  const vals = ['a', 'b', 'c', 'a/a', 'a/b', 'a/b/c', 'a/b/d', 'a/c', 'e']
   const expected = {
     'a': rootTrie.key,
     'b': rootTrie.key,
@@ -159,7 +158,6 @@ test('iterator nodes reference correct sub-tries', async t => {
   }
 
   t.end()
-
 })
 
 test('non-recursive cross-trie iterator with gt opt', async t => {
@@ -193,7 +191,7 @@ test('non-recursive cross-trie iterator with gt opt', async t => {
           t.same(res, abExpected, 'listed all values')
           return cb(null)
         })
-      },
+      }
     ])
   } catch (err) {
     t.error(err)
@@ -229,6 +227,108 @@ test('iterator fully enclosed by mount', async t => {
   }
 
   t.end()
+})
+
+test('in-memory mount iterator', async t => {
+  const { tries } = await create(5)
+  const [rootTrie, aTrie, bTrie, cTrie, abTrie] = tries
+
+  try {
+    await runAll([
+      cb => rootTrie.mount('/a', aTrie.key, cb),
+      cb => rootTrie.mount('/b', bTrie.key, cb),
+      cb => rootTrie.mount('/c', cTrie.key, cb),
+      cb => aTrie.mount('/b', abTrie.key, cb),
+      cb => abTrie.put('hello', 'world', cb),
+      cb => aTrie.get('b/hello', cb),
+      cb => validate(cb)
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+
+  t.end()
+
+  function validate (cb) {
+    rootTrie.listMounts({ memory: true }, (err, vals) => {
+      t.error(err, 'no error')
+      t.same(vals.length, 0)
+      aTrie.listMounts({ memory: true }, (err, vals) => {
+        t.error(err, 'no error')
+        t.same(vals.length, 1)
+        t.same(vals[0].path, '/b')
+        return cb(null)
+      })
+    })
+  }
+})
+
+test('non-recursive mount iterator', async t => {
+  const { tries } = await create(5)
+  const [rootTrie, aTrie, bTrie, cTrie, abTrie] = tries
+
+  try {
+    await runAll([
+      cb => rootTrie.mount('/a', aTrie.key, cb),
+      cb => rootTrie.mount('/b', bTrie.key, cb),
+      cb => rootTrie.mount('/c', cTrie.key, cb),
+      cb => aTrie.mount('/b', abTrie.key, cb),
+      cb => abTrie.put('hello', 'world', cb),
+      cb => aTrie.get('b/hello', cb),
+      cb => validate(cb)
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+
+  t.end()
+
+  function validate (cb) {
+    rootTrie.listMounts((err, vals) => {
+      t.error(err, 'no error')
+      t.same(vals.length, 3)
+      aTrie.listMounts((err, vals) => {
+        t.error(err, 'no error')
+        t.same(vals.length, 1)
+        t.same(vals[0].path, '/b')
+        return cb(null)
+      })
+    })
+  }
+})
+
+test('recursive mount iterator', async t => {
+  const { tries } = await create(5)
+  const [rootTrie, aTrie, bTrie, cTrie, abTrie] = tries
+
+  try {
+    await runAll([
+      cb => rootTrie.mount('/a', aTrie.key, cb),
+      cb => rootTrie.mount('/b', bTrie.key, cb),
+      cb => rootTrie.mount('/c', cTrie.key, cb),
+      cb => aTrie.mount('/b', abTrie.key, cb),
+      cb => abTrie.put('hello', 'world', cb),
+      cb => aTrie.get('b/hello', cb),
+      cb => validate(cb)
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+
+  t.end()
+
+  function validate (cb) {
+    rootTrie.listMounts({ recursive: true }, (err, vals) => {
+      t.error(err, 'no error')
+      t.same(vals.length, 4)
+      const expected = new Set(['/a', '/b', '/c', '/a/b'])
+      for (const val of vals) {
+        t.true(expected.has(val.path))
+        expected.delete(val.path)
+      }
+      return cb(null)
+    })
+  }
 })
 
 // Duplicated from hypertrie.

@@ -66,12 +66,13 @@ class MountableHypertrie {
     function update (feed) {
       if (self.sparse) {
         // TODO: This is a hack that should be moved into hypercore
-        feed.update(function loop () {
+        feed.update({ hash: false }, function loop () {
           feed.update(loop)
         })
       }
       if (feed.length !== 0) return cb(null)
-      return feed.update({ ifAvailable: true }, err => {
+      return feed.update({ hash: false, ifAvailable: true }, err => {
+        if (err) return cb(err)
         return cb(null)
       })
     }
@@ -85,7 +86,11 @@ class MountableHypertrie {
 
     const keyString = key.toString('hex')
     const subfeed = this.corestore.get({ ...opts, key, discoverable: true })
-    var trie = this._tries.get(keyString) || new MountableHypertrie(this.corestore, key, {
+
+    var trie = this._tries.get(keyString)
+    if (opts && opts.cached) return cb(null, trie)
+
+    trie = trie || new MountableHypertrie(this.corestore, key, {
       ...this.opts,
       ...opts,
       feed: subfeed,
@@ -115,14 +120,18 @@ class MountableHypertrie {
     }
   }
 
-  _trieForMountNode (mountNode, cb) {
+  _trieForMountNode (mountNode, opts, cb) {
+    if (typeof opts === 'function') return this._trieForMountNode(mountNode, {}, opts)
+    opts = opts || {}
+
     if (!mountNode) return cb(new Error(`Mount metadata not found`))
     try {
       var mountInfo = Mount.decode(mountNode.value)
     } catch (err) {
       return cb(err)
     }
-    this._createHypertrie(mountInfo.key, { version: mountInfo.version }, (err, trie) => {
+
+    this._createHypertrie(mountInfo.key, { ...opts, version: mountInfo.version }, (err, trie) => {
       if (err) return cb(err)
       return cb(null, trie, mountInfo)
     })
@@ -240,7 +249,6 @@ class MountableHypertrie {
     if (typeof opts === 'function') return this.put(path, value, null, opts)
     path = normalize(path)
 
-    const self = this
     const condition = putCondition(path, opts)
 
     this._trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
@@ -269,7 +277,6 @@ class MountableHypertrie {
     if (typeof opts === 'function') return this.del(path, null, opts)
     path = normalize(path)
 
-    const self = this
     const condition = delCondition(path, opts && opts.condition)
 
     this._trie.del(path, { ...opts, condition, closest: true }, (err, deleted) => {
@@ -302,7 +309,7 @@ class MountableHypertrie {
     const recursive = !!(opts && opts.recursive)
     const gt = !!(opts && opts.gt)
     // gt must always be false in the trie iteration in order to discover mountpoints.
-    if (gt) opts = { ...opts, gt: false}
+    if (gt) opts = { ...opts, gt: false }
 
     // Set in open.
     let root = null
@@ -378,6 +385,60 @@ class MountableHypertrie {
     })
   }
 
+  mountIterator (opts) {
+    const memory = opts && !!opts.memory
+    const recursive = opts && !!opts.recursive
+
+    const ite = this._trie.iterator(MOUNT_PREFIX, { hidden: true })
+    const stack = [{ trie: this, ite, prefix: '/' }]
+
+    return nanoiterator({ next })
+
+    function next (cb) {
+      const { trie, ite, prefix } = stack[0]
+      return ite.next((err, mountNode) => {
+        if (err) return cb(err)
+
+        if (!mountNode && stack.length === 1) return cb(null)
+        if (!mountNode) {
+          stack.shift()
+          return next(cb)
+        }
+
+        trie._trieForMountNode(mountNode, { cached: memory }, (err, subTrie, mountInfo) => {
+          if (err) return cb(err)
+          if (!subTrie) return next(cb)
+
+          const mountPath = p.join(prefix, mountInfo.localPath)
+          if (recursive) {
+            stack.unshift({
+              prefix: p.join(mountPath, mountInfo.remotePath),
+              ite: subTrie.iterator(MOUNT_PREFIX, { hidden: true }),
+              trie: subTrie
+            })
+          }
+
+          return cb(null, {
+            path: mountPath,
+            trie: subTrie
+          })
+        })
+      })
+    }
+  }
+
+  listMounts (opts, cb) {
+    if (typeof opts === 'function') return this.listMounts(null, opts)
+    const vals = []
+    const ite = this.mountIterator(opts)
+    ite.next(function onnext (err, val) {
+      if (err) return cb(err)
+      if (!val) return cb(null, vals)
+      vals.push(val)
+      return ite.next(onnext)
+    })
+  }
+
   createReadStream (prefix, opts) {
     return toStream(this.iterator(prefix, opts))
   }
@@ -403,12 +464,13 @@ class MountableHypertrie {
         this._trieForMountNode(mountNode, (err, trie, mountInfo) => {
           if (err) return rootWatcher.emit('error', err)
           watchers.push(trie.watch(pathToMount(path, mountInfo), onchange))
-        })}
+        })
+      }
     })
     const destroy = rootWatcher.destroy.bind(rootWatcher)
     rootWatcher.destroy = function () {
       destroy()
-      for (let watcher of watcherss) {
+      for (let watcher of watchers) {
         watcher.destroy()
       }
     }
@@ -436,7 +498,7 @@ function putCondition (path, opts) {
       return cb(err)
     }
     if (!userCondition) return cb(null, true)
-    if (closest && closest.key !== newNode.key && !userClosest) closest = null 
+    if (closest && closest.key !== newNode.key && !userClosest) closest = null
     userCondition(closest, newNode, (err, shouldExecute) => {
       if (err) return cb(err)
       return cb(null, shouldExecute)
@@ -471,5 +533,5 @@ function pathFromMount (path, mountInfo) {
 
 function normalize (path) {
   path = unixify(path)
-  return path.startsWith('/') ? path.slice(1) :  path
+  return path.startsWith('/') ? path.slice(1) : path
 }

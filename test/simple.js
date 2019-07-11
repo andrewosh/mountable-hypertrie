@@ -6,7 +6,7 @@ const { runAll } = require('./helpers/util')
 const MountableHypertrie = require('..')
 
 test('simple single-trie get', async t => {
-  const { tries, cores, store } = await create(1)
+  const { tries } = await create(1)
   const [trie] = tries
 
   try {
@@ -26,7 +26,7 @@ test('simple single-trie get', async t => {
 })
 
 test('simple two-trie get', async t => {
-  const { tries, cores, stores } = await create(3)
+  const { tries } = await create(3)
   const [trie1, trie2, trie3] = tries
 
   try {
@@ -48,7 +48,7 @@ test('simple two-trie get', async t => {
 })
 
 test('simple cross-trie get', async t => {
-  const { tries, cores, stores } = await create(2)
+  const { tries } = await create(2)
   const [rootTrie, subTrie] = tries
 
   try {
@@ -69,7 +69,7 @@ test('simple cross-trie get', async t => {
         t.same(node.key, 'b')
         t.same(node.value, Buffer.from('hello'))
         return cb(null)
-        }),
+      }),
       cb => subTrie.get('/b', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -86,7 +86,7 @@ test('simple cross-trie get', async t => {
 })
 
 test('simple cross-trie del', async t => {
-  const { tries, cores, store } = await create(2)
+  const { tries } = await create(2)
   const [rootTrie, subTrie] = tries
 
   try {
@@ -118,7 +118,7 @@ test('simple cross-trie del', async t => {
         t.false(node)
         return cb(null)
       }),
-      cb => rootTrie.del('/b', cb), 
+      cb => rootTrie.del('/b', cb),
       cb => rootTrie.get('/b', (err, node) => {
         if (err) return cb(err)
         t.false(node)
@@ -138,7 +138,7 @@ test('simple cross-trie del', async t => {
 })
 
 test('recursive cross-trie put/get', async t => {
-  const { tries, cores, store } = await create(3)
+  const { tries } = await create(3)
   const [rootTrie, subTrie, subsubTrie] = tries
 
   try {
@@ -162,7 +162,7 @@ test('recursive cross-trie put/get', async t => {
         t.same(node.key, 'a/b/d')
         t.same(node.value, Buffer.from('cat'))
         return cb(null)
-        }),
+      }),
       cb => subsubTrie.get('/d', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -179,7 +179,7 @@ test('recursive cross-trie put/get', async t => {
 })
 
 test('recursive cross-trie del', async t => {
-  const { tries, cores, store } = await create(3)
+  const { tries } = await create(3)
   const [rootTrie, subTrie, subsubTrie] = tries
 
   try {
@@ -223,6 +223,7 @@ test('recursive cross-trie del', async t => {
         return cb(null)
       }),
       cb => rootTrie.get('/d', (err, node) => {
+        t.error(err, 'no error')
         t.false(node)
         return cb(null)
       })
@@ -234,9 +235,8 @@ test('recursive cross-trie del', async t => {
   t.end()
 })
 
-
 test('recursive get node references the correct sub-trie', async t => {
-  const { tries, cores, store } = await create(3)
+  const { tries } = await create(3)
   const [rootTrie, subTrie, subsubTrie] = tries
 
   try {
@@ -258,7 +258,7 @@ test('recursive get node references the correct sub-trie', async t => {
         t.true(node)
         t.same(node[MountableHypertrie.Symbols.TRIE].key, subsubTrie.key)
         return cb(null)
-        }),
+      }),
       cb => rootTrie.get('/b', (err, node) => {
         if (err) return cb(err)
         t.true(node)
@@ -274,7 +274,7 @@ test('recursive get node references the correct sub-trie', async t => {
 })
 
 test('get on a checkout', async t => {
-  const { tries, cores, store } = await create(1)
+  const { tries } = await create(1)
   const [trie] = tries
 
   var checkout = null
@@ -290,6 +290,7 @@ test('get on a checkout', async t => {
       cb => trie.del('/a', cb),
       cb => {
         trie.get('/a', (err, node) => {
+          t.error(err, 'no error')
           t.same(node, null)
           return cb(null)
         })
@@ -308,7 +309,7 @@ test('get on a checkout', async t => {
 })
 
 test('delete a mount', async t => {
-  const { tries, cores, stores } = await create(3)
+  const { tries } = await create(3)
   const [trie1, trie2, trie3] = tries
 
   try {
@@ -341,4 +342,3 @@ test('delete a mount', async t => {
     t.fail(err)
   }
 })
-

@@ -37,7 +37,6 @@ function replicateAll (tries, opts) {
       streams.push([s1, s2])
 
       s1.pipe(s2).pipe(s1)
-
     } replicated.add(i)
   }
   return streams
