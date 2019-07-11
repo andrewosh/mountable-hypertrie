@@ -385,8 +385,8 @@ class MountableHypertrie {
   }
 
   mountIterator (opts) {
-    const memory = opts && !!opts.memory
-    const recursive = opts && !!opts.recursive
+    const memory = !!(opts && opts.memory)
+    const recursive = !!(opts && opts.recursive)
 
     const ite = this._trie.iterator(MOUNT_PREFIX, { hidden: true })
     const stack = [{ trie: this, ite, prefix: '/' }]
@@ -398,7 +398,7 @@ class MountableHypertrie {
       return ite.next((err, mountNode) => {
         if (err) return cb(err)
 
-        if (!mountNode && stack.length === 1) return cb(null)
+        if (!mountNode && stack.length === 1) return cb(null, null)
         if (!mountNode) {
           stack.shift()
           return next(cb)
