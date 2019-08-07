@@ -1,4 +1,6 @@
 const p = require('path').posix
+const { EventEmitter } = require('events')
+
 const hypertrie = require('hypertrie')
 const thunky = require('thunky')
 const nanoiterator = require('nanoiterator')
@@ -14,8 +16,10 @@ const Flags = {
 const MOUNT_PREFIX = '/mounts'
 const OWNER = Symbol('mountable-hypertrie-owner')
 
-class MountableHypertrie {
+class MountableHypertrie extends EventEmitter {
   constructor (corestore, key, opts = {}) {
+    super()
+
     this.corestore = corestore
     this.key = key
     this.opts = opts
@@ -28,6 +32,8 @@ class MountableHypertrie {
       if (!opts.secretKey) feed = this.corestore.default({ key, ...this.opts })
       feed = this.corestore.get({ key, discoverable: true, ...this.opts })
     }
+    feed.once('ready', () => this.emit('feed', feed))
+
     this._trie = opts.trie || hypertrie(null, {
       ...opts,
       feed
@@ -85,6 +91,7 @@ class MountableHypertrie {
 
     const keyString = key.toString('hex')
     const subfeed = this.corestore.get({ ...opts, key, discoverable: true })
+    subfeed.once('ready', () => this.emit('feed', subfeed))
 
     var trie = this._tries.get(keyString)
     if (opts && opts.cached) return cb(null, trie)
