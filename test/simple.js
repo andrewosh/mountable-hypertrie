@@ -47,6 +47,76 @@ test('simple two-trie get', async t => {
   }
 })
 
+test('versioned two-trie mount/remount', async t => {
+  const { tries } = await create(2)
+  const [trie1, trie2] = tries
+  try {
+    await runAll([
+      cb => trie2.put('/c', 'hello', cb),
+      cb => trie1.mount('/b', trie2.key, { version: trie2.version }, cb),
+      cb => trie2.put('/d', 'goodbye', cb),
+      cb => {
+        trie1.get('/b/d', (err, node) => {
+          t.error(err, 'no error')
+          t.false(node)
+          return cb(null)
+        })
+      },
+      cb => trie1.unmount('/b', cb),
+      cb => trie1.mount('/b', trie2.key, cb),
+      cb => {
+        trie1.get('/b/d', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('goodbye'))
+          t.end()
+        })
+      }
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
+test('nested versioned trie get + remount', async t => {
+  const { tries } = await create(3)
+  const [trie1, trie2, trie3] = tries
+
+  try {
+    await runAll([
+      cb => trie3.put('/c', 'hello', cb),
+      cb => trie2.mount('/b', trie3.key, { version: trie3.version }, cb),
+      cb => trie1.mount('/a', trie2.key, cb),
+      cb => trie3.put('/d', 'goodbye', cb),
+      cb => {
+        trie1.get('/a/b/c', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          return cb(null)
+        })
+      },
+      cb => {
+        trie1.get('/a/b/d', (err, node) => {
+          t.error(err, 'no error')
+          t.false(node)
+          return cb(null)
+        })
+      },
+      cb => trie2.unmount('/b', cb),
+      cb => trie2.mount('/b', trie3.key, { version: trie3.version }, cb),
+      cb => {
+        trie1.get('/a/b/d', (err, node) => {
+          t.error(err, 'no error')
+          t.true(node)
+          t.same(node.value, Buffer.from('goodbye'))
+          t.end()
+        })
+      },
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
 test('simple cross-trie get', async t => {
   const { tries } = await create(2)
   const [rootTrie, subTrie] = tries

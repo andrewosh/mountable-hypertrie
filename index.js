@@ -86,11 +86,11 @@ class MountableHypertrie extends EventEmitter {
   _createHypertrie (key, opts, cb) {
     const self = this
 
-    var versionedTrie = (opts && opts.version) ? this._checkouts.get(`${key}:${opts.version}`) : null
+    const keyString = key.toString('hex')
+    var versionedTrie = (opts && opts.version) ? this._checkouts.get(`${keyString}:${opts.version}`) : null
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
-    const keyString = key.toString('hex')
-    const subfeed = this.corestore.get({ ...opts, key, discoverable: true })
+    const subfeed = this.corestore.get({ ...opts, key, discoverable: true, version: null })
     subfeed.once('ready', () => this.emit('feed', subfeed))
 
     var trie = this._tries.get(keyString)
@@ -98,7 +98,6 @@ class MountableHypertrie extends EventEmitter {
 
     trie = trie || new MountableHypertrie(this.corestore, key, {
       ...this.opts,
-      ...opts,
       feed: subfeed,
       sparse: this.sparse
     })
@@ -114,7 +113,7 @@ class MountableHypertrie extends EventEmitter {
     function onready () {
       if (!opts || !opts.version) return ontrie(trie)
       versionedTrie = trie.checkout(opts.version)
-      this._checkouts.set(`${keyString}:${opts.version}`, versionedTrie)
+      self._checkouts.set(`${keyString}:${opts.version}`, versionedTrie)
       return ontrie(versionedTrie)
     }
 
@@ -228,7 +227,7 @@ class MountableHypertrie extends EventEmitter {
       if (err) return cb(err)
       if (!node) return cb(null, null, this)
       if (this._isNormalNode(node)) {
-        if (node.key !== path) return cb(null, null, this)
+        if (node.key !== path && !(opts && opts.closest)) return cb(null, null, this)
         node[MountableHypertrie.Symbols.TRIE] = this
         return cb(null, node, this)
       }
@@ -459,6 +458,14 @@ class MountableHypertrie extends EventEmitter {
       version: version || 1,
       ...this.opts
     })
+  }
+
+  history (opts) {
+    return this._trie.history(opts)
+  }
+
+  createHistoryStream (opts) {
+    return toStream(this.history(opts))
   }
 
   watch (path, onchange) {
