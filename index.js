@@ -11,7 +11,8 @@ const unixify = require('unixify')
 const { Mount } = require('./lib/messages')
 
 const Flags = {
-  MOUNT: 1
+  MOUNT_INFO: 1,
+  MOUNT_POINTER: 2
 }
 const MOUNT_PREFIX = '/mounts'
 const OWNER = Symbol('mountable-hypertrie-owner')
@@ -34,16 +35,16 @@ class MountableHypertrie extends EventEmitter {
     }
     feed.once('ready', () => this.emit('feed', feed))
 
-    this._trie = opts.trie || hypertrie(null, {
+    this.trie = opts.trie || hypertrie(null, {
       ...opts,
       feed
     })
-    if (opts.version) this._trie = this._trie.checkout(opts.version)
+    if (opts.version) this.trie = this.trie.checkout(opts.version)
     if (!opts.version) {
       // If this is a checkout, it will never be writable.
       // If this trie's feed was instantiated by another hypertrie, reuse it here.
-      if (this._trie.feed[OWNER]) this._trie = this._trie.feed[OWNER]
-      else this._trie.feed[OWNER] = this._trie
+      if (this.trie.feed[OWNER]) this.trie = this.trie.feed[OWNER]
+      else this.trie.feed[OWNER] = this.trie
     }
 
     // TODO: Replace with a LRU cache.
@@ -54,9 +55,9 @@ class MountableHypertrie extends EventEmitter {
   }
 
   _ready (cb) {
-    this._trieReady(this._trie, true, err => {
+    this._trieReady(this.trie, true, err => {
       if (err) return cb(err)
-      this.key = this._trie.key
+      this.key = this.trie.key
       return cb(null)
     })
   }
@@ -118,7 +119,7 @@ class MountableHypertrie extends EventEmitter {
     }
 
     function ontrie (trie) {
-      self._trieReady(trie._trie, false, err => {
+      self._trieReady(trie.trie, false, err => {
         if (err) return cb(err)
         return cb(null, trie)
       })
@@ -144,35 +145,35 @@ class MountableHypertrie extends EventEmitter {
 
   _isNormalNode (node) {
     if (!node) return true
-    return node.flags ^ Flags.MOUNT
+    return (node.flags ^ Flags.MOUNT_INFO) && (node.flags ^ Flags.MOUNT_POINTER)
   }
 
   _getSubtrie (path, cb) {
-    this._trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
+    this.trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
       if (err) return cb(err)
       const mountPath = mountNode && mountNode.key.slice(7)
       if (this._isNormalNode(mountNode) || p.relative(mountPath, path).startsWith('..')) {
-        return cb(null, this._trie, { localPath: '', remotePath: '' })
+        return cb(null, this.trie, { localPath: '', remotePath: '' })
       }
       return this._trieForMountNode(mountNode, cb)
     })
   }
 
   get version () {
-    return this._trie.version
+    return this.trie.version
   }
 
   getMetadata (cb) {
-    return this._trie.getMetadata(cb)
+    return this.trie.getMetadata(cb)
   }
 
   setMetadata (metadata, cb) {
-    return this._trie.setMetadata(metadata, cb)
+    return this.trie.setMetadata(metadata, cb)
   }
 
   getFeed () {
-    if (!this._trie) return null
-    return this._trie.feed
+    if (!this.trie) return null
+    return this.trie.feed
   }
 
   mount (path, key, opts, cb) {
@@ -191,9 +192,9 @@ class MountableHypertrie extends EventEmitter {
       const innerPath = pathToMount(path, mountInfo)
       if (!mountInfo.localPath) {
         return trie.batch([
-          { type: 'put', key: p.join(MOUNT_PREFIX, innerPath), flags: Flags.MOUNT, hidden: true, value: mountRecord },
+          { type: 'put', key: p.join(MOUNT_PREFIX, innerPath), flags: Flags.MOUNT_INFO, hidden: true, value: mountRecord },
           // TODO: empty values going to cause harm here?
-          { type: 'put', key: innerPath, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
+          { type: 'put', key: innerPath, flags: Flags.MOUNT_POINTER, value: (opts && opts.value) || Buffer.alloc(0) }
         ], cb)
       }
       return trie.mount(innerPath, key, opts, cb)
@@ -223,7 +224,7 @@ class MountableHypertrie extends EventEmitter {
 
     const self = this
 
-    this._trie.get(path, { ...opts, closest: true }, (err, node) => {
+    this.trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
       if (!node) return cb(null, null, this)
       if (this._isNormalNode(node)) {
@@ -256,7 +257,7 @@ class MountableHypertrie extends EventEmitter {
 
     const condition = putCondition(path, opts)
 
-    this._trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
+    this.trie.put(path, value, { ...opts, condition, closest: true }, (err, inserted) => {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
         return this._getSubtrie(path, putIntoMount)
@@ -284,7 +285,7 @@ class MountableHypertrie extends EventEmitter {
 
     const condition = delCondition(path, opts && opts.condition)
 
-    this._trie.del(path, { ...opts, condition, closest: true }, (err, deleted) => {
+    this.trie.del(path, { ...opts, condition, closest: true }, (err, deleted) => {
       if (err && !err.mountpoint) return cb(err)
       else if (err) {
         return this._getSubtrie(path, delFromMount)
@@ -394,7 +395,7 @@ class MountableHypertrie extends EventEmitter {
     const memory = !!(opts && opts.memory)
     const recursive = !!(opts && opts.recursive)
 
-    const ite = this._trie.iterator(MOUNT_PREFIX, { hidden: true })
+    const ite = this.trie.iterator(MOUNT_PREFIX, { hidden: true })
     const stack = [{ trie: this, ite, prefix: '/' }]
 
     return nanoiterator({ next })
@@ -454,24 +455,90 @@ class MountableHypertrie extends EventEmitter {
 
   checkout (version) {
     return new MountableHypertrie(this.corestore, null, {
-      trie: this._trie,
+      trie: this.trie,
       version: version || 1,
       ...this.opts
     })
   }
 
   history (opts) {
-    return this._trie.history(opts)
+    const self = this
+    const ite =  this.trie.history(opts)
+
+    return nanoiterator({ next })
+
+    function next (cb) {
+      ite.next((err, node) => {
+        if (err) return cb(err)
+        if (!node) return cb(null, null)
+        if (self._isNormalNode(node)) return cb(null, { type: 'put', node })
+
+        // Do not return the mount pointers, since we return mount info nodes instead.
+        if (node.flags & Flags.MOUNT_POINTER) return next(cb) 
+
+        return self._trieForMountNode(node, (err, trie, mountInfo) => {
+          if (err) return cb(err)
+          return cb(null, { type: 'mount', info: mountInfo })
+        })
+      })
+    }
+  }
+
+  diff (other, prefix, opts)  {
+    const self = this
+    const ite = this.trie.diff(other.trie, prefix)
+
+    return nanoiterator({ next })
+
+    function next (cb) {
+      var remaining = 2
+
+      ite.next((err, keyDiff) => {
+        if (err) return cb(err)
+        if (!keyDiff) return cb(null, null)
+        const { left: rawLeft, right: rawRight, key } = keyDiff
+        return updateIfMount(rawLeft, (err, left) => {
+          if (err) return cb(err)
+          return updateIfMount(rawRight, (err, right) => {
+            if (err) return cb(err)
+            return cb(null, createDiff(left, right, key))
+          })
+        })
+      })
+    }
+
+    function updateIfMount (node, cb) {
+      if (!node) return process.nextTick(cb, null)
+      if (self._isNormalNode(node)) return process.nextTick(cb, null, node)
+      return self._trieForMountNode(node, (err, mountInfo) => {
+        if (err) return cb(err)
+        return cb(null, { info: mountInfo })
+      })
+    }
+
+    function createDiff (left, right, key) {
+      const diff = { left, right, key }
+      if (!left && right) {
+        diff.type = !!right.info ? 'unmount' : 'del'
+      } else {
+        diff.type = !!left.info ? 'mount' : 'put'
+      }
+      return diff
+    }
   }
 
   createHistoryStream (opts) {
     return toStream(this.history(opts))
   }
 
+  createDiffStream (other, prefix, opts) {
+    return toStream(this.diff(other, prefix, opts))
+  }
+
   watch (path, onchange) {
-    let rootWatcher = this._trie.watch(path, onchange)
+    let rootWatcher = this.trie.watch(path, onchange)
     const watchers = []
-    this._trie.list(p.join(MOUNT_PREFIX, path), { hidden: true }, (err, mountNodes) => {
+    this.trie.list(p.join(MOUNT_PREFIX, path), { hidden: true }, (err, mountNodes) => {
       if (err) return rootWatcher.emit('error', err)
       for (let mountNode of mountNodes) {
         this._trieForMountNode(mountNode, (err, trie, mountInfo) => {
@@ -505,7 +572,7 @@ function putCondition (path, opts) {
   const userCondition = opts && opts.condition
   const userClosest = opts && opts.closest
   return (closest, newNode, cb) => {
-    if (closest && (closest.flags & Flags.MOUNT) && newNode.key.startsWith(closest.key)) {
+    if (closest && (closest.flags & Flags.MOUNT_POINTER) && newNode.key.startsWith(closest.key)) {
       const err = new Error('Operating on a mountpoint')
       err.mountpoint = true
       return cb(err)
@@ -521,7 +588,7 @@ function putCondition (path, opts) {
 
 function delCondition (path, userCondition) {
   return (closest, cb) => {
-    if (closest && (closest.flags & Flags.MOUNT) && (closest.key !== path)) {
+    if (closest && (closest.flags & Flags.MOUNT_POINTER) && (closest.key !== path)) {
       const err = new Error('Operating on a mountpoint')
       err.mountpoint = true
       return cb(err)
