@@ -3,7 +3,7 @@ const test = require('tape')
 const { create } = require('./helpers/create')
 const { runAll } = require('./helpers/util')
 
-test('two-trie history', async t => {
+test.skip('two-trie history', async t => {
   const { tries } = await create(2)
   const [trie1, trie2] = tries
 
