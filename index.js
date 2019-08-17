@@ -32,13 +32,15 @@ class MountableHypertrie extends EventEmitter {
       if (!opts.secretKey) feed = this.corestore.default({ key, ...this.opts })
       feed = this.corestore.get({ key, discoverable: true, ...this.opts })
     }
-    feed.once('ready', () => this.emit('feed', feed))
 
     this.trie = opts.trie || hypertrie(null, {
       ...opts,
       feed,
       version: null
     })
+    this.feed = this.trie.feed
+    if (this.trie !== opts.trie) this.trie.on('error', err => this.emit('error', err))
+    this.feed.once('ready', () => this.emit('feed', feed))
 
     if (opts.version) {
       this.trie = this.trie.checkout(opts.version)
@@ -326,6 +328,7 @@ class MountableHypertrie extends EventEmitter {
     let rootInfo = null
 
     // If the iterator is currently iterating through a sub-trie, then these will be non-null.
+    let subTrie = null
     let sub = null
     let subInfo = null
 
@@ -346,11 +349,11 @@ class MountableHypertrie extends EventEmitter {
         return sub.next((err, node) => {
           if (err) return cb(err)
           if (!node) {
-            sub = subInfo = null
+            sub = subInfo = subTrie = null
             return next(cb)
           }
           node.key = pathFromMount(node.key, subInfo)
-          if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = sub
+          if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = subTrie
           return prereturn(node, cb)
         })
       }
@@ -367,6 +370,7 @@ class MountableHypertrie extends EventEmitter {
           const subPrefix = pathToMount(node.key, mountInfo)
           sub = trie.iterator(subPrefix, opts)
           subInfo = mountInfo
+          subTrie = trie
           return prereturn(node, cb)
         })
       })
