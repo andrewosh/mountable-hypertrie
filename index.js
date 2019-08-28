@@ -32,7 +32,7 @@ class MountableHypertrie extends EventEmitter {
       if (!opts.secretKey) feed = this.corestore.default({ key, ...this.opts })
       feed = this.corestore.get({ key, discoverable: true, ...this.opts })
     }
-    feed.once('ready', () => this.emit('feed', feed))
+    feed.ready(() => this.emit('feed', feed))
 
     this.trie = opts.trie || hypertrie(null, {
       ...opts,
