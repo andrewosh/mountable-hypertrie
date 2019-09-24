@@ -344,7 +344,7 @@ test('recursive get node references the correct sub-trie', async t => {
 })
 
 test('get on a checkout', async t => {
-  const { tries } = await create(1)
+  const { tries } = await create(2)
   const [trie] = tries
 
   var checkout = null

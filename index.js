@@ -2,6 +2,8 @@ const p = require('path').posix
 const { EventEmitter } = require('events')
 
 const hypertrie = require('hypertrie')
+const HypercoreProtocol = require('hypercore-protocol')
+const hypercoreCrypto = require('hypercore-crypto')
 const thunky = require('thunky')
 const nanoiterator = require('nanoiterator')
 const toStream = require('nanoiterator/to-stream')
@@ -22,34 +24,33 @@ class MountableHypertrie extends EventEmitter {
 
     this.corestore = corestore
     this.key = key
+    this.discoveryKey = this.key ? hypercoreCrypto.discoveryKey(this.key) : null
     this.opts = opts
     this.sparse = opts.sparse !== false
 
-    if (opts.valueEncoding) throw new Error('MountableHypertrie does not currently support the valueEncoding opt.')
+    if (opts.valueEncoding) throw new Error('MountableHypertrie does not currently support a valueEncoding option.')
 
     var feed = this.opts.feed
-    if (!feed) {
-      if (!opts.secretKey) feed = this.corestore.default({ key, ...this.opts })
-      feed = this.corestore.get({ key, discoverable: true, ...this.opts })
+    if (!feed) feed = this.corestore.default({ key, ...this.opts })
+
+    if (feed[OWNER]) {
+      this.trie = feed[OWNER]
+    } else {
+      this.trie = opts.trie || hypertrie(null, {
+        ...opts,
+        feed,
+        version: null,
+        alwaysUpdate: true
+      })
+      this.trie.feed[OWNER] = this.trie
+    }
+    if (opts.version) {
+      this.trie = this.trie.checkout(opts.version)
     }
 
-    this.trie = opts.trie || hypertrie(null, {
-      ...opts,
-      feed,
-      version: null
-    })
     this.feed = this.trie.feed
     if (this.trie !== opts.trie) this.trie.on('error', err => this.emit('error', err))
     this.feed.once('ready', () => this.emit('feed', feed))
-
-    if (opts.version) {
-      this.trie = this.trie.checkout(opts.version)
-    } else {
-      // If this is a checkout, it will never be writable.
-      // If this trie's feed was instantiated by another hypertrie, reuse it here.
-      if (this.trie.feed[OWNER]) this.trie = this.trie.feed[OWNER]
-      else this.trie.feed[OWNER] = this.trie
-    }
 
     // TODO: Replace with a LRU cache.
     this._tries = new Map()
@@ -59,10 +60,14 @@ class MountableHypertrie extends EventEmitter {
   }
 
   _ready (cb) {
-    this._trieReady(this.trie, true, err => {
+    this.corestore.ready(err => {
       if (err) return cb(err)
-      this.key = this.trie.key
-      return cb(null)
+      this._trieReady(this.trie, true, err => {
+        if (err) return cb(err)
+        this.key = this.trie.key
+        this.discoveryKey = this.trie.discoveryKey
+        return cb(null)
+      })
     })
   }
 
@@ -75,12 +80,6 @@ class MountableHypertrie extends EventEmitter {
     })
 
     function update (feed) {
-      if (self.sparse) {
-        // TODO: This is a hack that should be moved into hypercore
-        feed.update({ hash: false }, function loop () {
-          feed.update(loop)
-        })
-      }
       if (feed.length !== 0) return cb(null)
       return feed.update({ hash: false, ifAvailable: true }, () => {
         return cb(null)
@@ -95,8 +94,11 @@ class MountableHypertrie extends EventEmitter {
     var versionedTrie = (opts && opts.version) ? this._checkouts.get(`${keyString}:${opts.version}`) : null
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
-    const subfeed = this.corestore.get({ ...opts, key, discoverable: true, version: null })
-    subfeed.once('ready', () => this.emit('feed', subfeed))
+    const subfeed = this.corestore.get({ ...opts, key,  version: null, parents: [this.key] })
+    subfeed.ready(err => {
+      if (err) this.emit('error', err)
+      else this.emit('feed', subfeed)
+    })
 
     var trie = this._tries.get(keyString)
     if (opts && opts.cached) return cb(null, trie)
@@ -201,7 +203,11 @@ class MountableHypertrie extends EventEmitter {
           { type: 'put', key: innerPath, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
         ], cb)
       }
-      return trie.mount(innerPath, key, opts, cb)
+      trie.mount(innerPath, key, opts, err => {
+        if (err) return cb(err)
+        // Eagerly inflate the mountpoint.
+        return trie._getSubtrie(innerPath, cb)
+      })
     })
   }
 
@@ -463,8 +469,9 @@ class MountableHypertrie extends EventEmitter {
 
   checkout (version) {
     return new MountableHypertrie(this.corestore, null, {
-      trie: this.trie,
       ...this.opts,
+      trie: this.trie,
+      feed: this.feed,
       version: version || 1
     })
   }
@@ -491,11 +498,12 @@ class MountableHypertrie extends EventEmitter {
   diff (other, prefix, opts)  {
     if (typeof other === 'string') return this.diff(null, other, prefix)
     const checkout = (typeof other === 'number' || !other) ? this.checkout(other) : other
+    if (!prefix) prefix = '/'
 
     const self = this
-    const ite = this.trie.diff(checkout.trie, prefix, opts)
+    var ite = null
 
-    return nanoiterator({ next })
+    return nanoiterator({ next, open })
 
     function next (cb) {
       var remaining = 2
@@ -511,6 +519,15 @@ class MountableHypertrie extends EventEmitter {
             return cb(null, createDiff(left, right, key))
           })
         })
+      })
+    }
+
+    function open (cb) {
+      self._getSubtrie(prefix, (err, trie, mountInfo) => {
+        if (err) return cb(err)
+        const subPrefix = pathToMount(prefix, mountInfo)
+        ite = trie.diff(checkout.trie, pathToMount(prefix, mountInfo), opts)
+        return cb(null)
       })
     }
 
@@ -564,8 +581,13 @@ class MountableHypertrie extends EventEmitter {
     return rootWatcher
   }
 
-  replicate (opts) {
-    return this.corestore.replicate(opts)
+  replicate (isInitiator, opts) {
+    const stream = new HypercoreProtocol(isInitiator, { ...opts })
+    this.ready(err => {
+      if (err) return stream.destroy(err)
+      this.corestore.replicate(isInitiator, this.discoveryKey, { ...opts, stream })
+    })
+    return stream
   }
 }
 

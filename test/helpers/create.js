@@ -1,5 +1,5 @@
 const { promisify } = require('util')
-const corestore = require('corestore')
+const Corestore = require('corestore')
 const ram = require('random-access-memory')
 
 const MountableHypertrie = require('../..')
@@ -10,14 +10,17 @@ module.exports.create = async function (numTries, opts) {
   const stores = []
 
   for (let i = 0; i < numTries; i++) {
-    const store = corestore(ram, { sparse })
+    const store = new Corestore(ram, { sparse })
+    await store.ready()
     const trie = new MountableHypertrie(store, null, { ...opts, sparse })
     await promisify(trie.ready)()
+    // TODO: Remove
+    if (i === 0) trie.feed.ifAvailable.debug = true
     tries.push(trie)
     stores.push(store)
   }
 
-  const streams = replicateAll(tries, { sparse, live: true, encrypt: false })
+  const streams = replicateAll(tries, { sparse, live: true })
 
   return { tries, stores, streams }
 }
@@ -32,8 +35,8 @@ function replicateAll (tries, opts) {
       const source = tries[i]
       const dest = tries[j]
 
-      const s1 = source.replicate({ ...opts })
-      const s2 = dest.replicate({ ...opts })
+      const s1 = source.replicate(true, { ...opts })
+      const s2 = dest.replicate(false, { ...opts })
       streams.push([s1, s2])
 
       s1.pipe(s2).pipe(s1)
