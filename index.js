@@ -62,29 +62,13 @@ class MountableHypertrie extends EventEmitter {
   _ready (cb) {
     this.corestore.ready(err => {
       if (err) return cb(err)
-      this._trieReady(this.trie, true, err => {
+      this.trie.ready(err => {
         if (err) return cb(err)
         this.key = this.trie.key
         this.discoveryKey = this.trie.discoveryKey
         return cb(null)
       })
     })
-  }
-
-  _trieReady (trie, root, cb) {
-    const self = this
-
-    trie.ready(err => {
-      if (err) return cb(err)
-      update(trie.feed)
-    })
-
-    function update (feed) {
-      if (feed.length !== 0) return cb(null)
-      return feed.update({ hash: false, ifAvailable: true }, () => {
-        return cb(null)
-      })
-    }
   }
 
   _createHypertrie (key, opts, cb) {
@@ -125,7 +109,7 @@ class MountableHypertrie extends EventEmitter {
     }
 
     function ontrie (trie) {
-      self._trieReady(trie.trie, false, err => {
+      trie.trie.ready(err => {
         if (err) return cb(err)
         return cb(null, trie)
       })
