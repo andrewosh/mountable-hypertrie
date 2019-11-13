@@ -544,25 +544,58 @@ class MountableHypertrie extends EventEmitter {
   }
 
   watch (path, onchange) {
-    let rootWatcher = this.trie.watch(path, onchange)
-    const watchers = []
-    this.trie.list(p.join(MOUNT_PREFIX, path), { hidden: true }, (err, mountNodes) => {
-      if (err) return rootWatcher.emit('error', err)
-      for (let mountNode of mountNodes) {
-        this._trieForMountNode(mountNode, (err, trie, mountInfo) => {
-          if (err) return rootWatcher.emit('error', err)
-          watchers.push(trie.watch(pathToMount(path, mountInfo), onchange))
-        })
-      }
-    })
+    const self = this
+    var destroyed = false
+
+    var rootWatcher = this.trie.watch(path, onchange)
+    var watchers = []
     const destroy = rootWatcher.destroy.bind(rootWatcher)
+    rootWatcher.watchers = watchers
     rootWatcher.destroy = function () {
+      if (destroyed) return
+      destroyed = true
       destroy()
       for (let watcher of watchers) {
         watcher.destroy()
       }
     }
+
+    createSubWatchers(err => {
+      if (err) rootWatcher.emit('error', err)
+      rootWatcher.emit('ready', watchers)
+    })
+
     return rootWatcher
+
+    function createSubWatchers (cb) {
+      self.trie.list(p.join(MOUNT_PREFIX, path), { hidden: true }, (err, mountNodes) => {
+        if (err || destroyed) return cb(err)
+        if (!mountNodes || !mountNodes.length) return cb(null)
+        var readyWatchers = 0
+        for (let mountNode of mountNodes) {
+          if (destroyed) return cb(null)
+          self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
+            if (err || destroyed) return cb(err)
+            const subWatcher = trie.watch(pathToMount(path, mountInfo), () => {
+              onchange()
+            })
+            watchers.push(subWatcher)
+            if (trie.trie) {
+              subWatcher.once('ready', subsubWatchers => {
+                watchers.push.apply(watchers, subsubWatchers)
+                return subWatcherReady()
+              })
+            } else {
+              return subWatcherReady()
+            }
+          })
+        }
+
+        function subWatcherReady () {
+          if (++readyWatchers === mountNodes.length) return cb(null)
+        }
+      })
+    }
   }
 
   replicate (isInitiator, opts) {
