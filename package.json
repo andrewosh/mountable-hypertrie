@@ -30,7 +30,7 @@
     "tape": "^4.10.1"
   },
   "dependencies": {
-    "hypertrie": "^4.0.0",
+    "hypertrie": "^4.0.1",
     "is-options": "^1.0.1",
     "nanoiterator": "^1.2.0",
     "protocol-buffers": "^4.1.0",
