@@ -228,7 +228,7 @@ class MountableHypertrie extends EventEmitter {
         node[MountableHypertrie.Symbols.TRIE] = this
         return cb(null, node, this)
       }
-      if (node.key === path) return cb(null, node)
+      if (node.key === path) return cb(null, node, this)
       return this._getSubtrie(path, getFromMount)
     })
 
