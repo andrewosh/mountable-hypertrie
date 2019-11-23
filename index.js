@@ -543,12 +543,13 @@ class MountableHypertrie extends EventEmitter {
     return toStream(this.diff(other, prefix, opts))
   }
 
-  watch (path, onchange) {
+  watch (path, opts, onchange) {
+    if (typeof opts === 'function') return this.watch(path, null, opts)
     const self = this
     var destroyed = false
 
     var rootWatcher = this.trie.watch(path, onchange)
-    var watcherKeys = new Set()
+    var watcherKeys = (opts && opts._watcherKeys) || new Set()
     var watchers = []
 
     const destroy = rootWatcher.destroy.bind(rootWatcher)
@@ -583,7 +584,7 @@ class MountableHypertrie extends EventEmitter {
             if (watcherKeys.has(watcherKey)) return subWatcherReady()
             watcherKeys.add(watcherKey)
 
-            const subWatcher = trie.watch(pathToMount(path, mountInfo), () => {
+            const subWatcher = trie.watch(pathToMount(path, mountInfo), { _watcherKeys: watcherKeys }, () => {
               onchange()
             })
             watchers.push(subWatcher)
