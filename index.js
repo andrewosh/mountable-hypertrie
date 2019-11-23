@@ -548,7 +548,9 @@ class MountableHypertrie extends EventEmitter {
     var destroyed = false
 
     var rootWatcher = this.trie.watch(path, onchange)
+    var watcherKeys = new Set()
     var watchers = []
+
     const destroy = rootWatcher.destroy.bind(rootWatcher)
     rootWatcher.watchers = watchers
     rootWatcher.destroy = function () {
@@ -576,6 +578,11 @@ class MountableHypertrie extends EventEmitter {
           if (destroyed) return cb(null)
           self._trieForMountNode(mountNode, (err, trie, mountInfo) => {
             if (err || destroyed) return cb(err)
+
+            const watcherKey = mountInfo.key.toString('hex')
+            if (watcherKeys.has(watcherKey)) return subWatcherReady()
+            watcherKeys.add(watcherKey)
+
             const subWatcher = trie.watch(pathToMount(path, mountInfo), () => {
               onchange()
             })

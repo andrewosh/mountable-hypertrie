@@ -412,3 +412,32 @@ test('delete a mount', async t => {
     t.fail(err)
   }
 })
+
+test('can create a cyclic mount', async t => {
+  const { tries } = await create(2)
+  const [trie1, trie2] = tries
+
+  try {
+    await runAll([
+      cb => trie1.mount('/a', trie2.key, cb),
+      cb => trie2.mount('/b', trie1.key, cb),
+      cb => trie1.put('/c', 'hello', cb),
+      cb => {
+        trie1.get('/c', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          return cb(null)
+        })
+      },
+      cb => {
+        trie1.get('a/b/c', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          t.end()
+        })
+      }
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
