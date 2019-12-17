@@ -10,12 +10,11 @@ module.exports.create = async function (numTries, opts) {
   const stores = []
 
   for (let i = 0; i < numTries; i++) {
-    const store = new Corestore(ram, { sparse })
+    const store = new Corestore((opts && opts._storage) || ram, { sparse })
     await store.ready()
-    const trie = new MountableHypertrie(store, null, { ...opts, sparse })
+    const feed = store.get()
+    const trie = new MountableHypertrie(store, null, { ...opts, sparse, feed })
     await promisify(trie.ready)()
-    // TODO: Remove
-    if (i === 0) trie.feed.ifAvailable.debug = true
     tries.push(trie)
     stores.push(store)
   }

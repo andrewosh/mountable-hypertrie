@@ -5,6 +5,7 @@ const { runAll } = require('./helpers/util')
 
 const MountableHypertrie = require('..')
 
+
 test('simple single-trie iterator', async t => {
   const { tries } = await create(1)
   const [rootTrie] = tries
@@ -75,6 +76,36 @@ test('multi-level nested iterator', async t => {
       cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
       cb => {
         all(rootTrie.iterator({ recursive: true }), (err, map) => {
+          t.error(err, 'no error')
+          t.same(map, expected, 'iterated all values')
+          return cb(null)
+        })
+      }
+    ])
+  } catch (err) {
+    t.error(err)
+  }
+
+  t.end()
+})
+
+test('iteration without mounts', async t => {
+  const { tries } = await create(3)
+  const [rootTrie, aTrie, abTrie] = tries
+
+  const vals = ['b', 'c', 'e', 'b/c', 'b/d', 'a']
+  const expected = toMap(vals)
+
+  try {
+    await put(rootTrie, ['b', 'c', 'e'])
+    await put(rootTrie, ['b/c', 'b/d'])
+    await put(aTrie, ['a', 'c'], 'a/')
+    await put(abTrie, ['c', 'd'], 'a/b/')
+    await runAll([
+      cb => rootTrie.mount('a', aTrie.key, { value: 'a' }, cb),
+      cb => aTrie.mount('b', abTrie.key, { value: 'a/b' }, cb),
+      cb => {
+        all(rootTrie.iterator({ recursive: true, noMounts: true }), (err, map) => {
           t.error(err, 'no error')
           t.same(map, expected, 'iterated all values')
           return cb(null)

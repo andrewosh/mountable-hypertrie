@@ -1,4 +1,6 @@
 const test = require('tape')
+const raf = require('random-access-file')
+const tmp = require('tmp')
 
 const { create } = require('./helpers/create')
 const { runAll } = require('./helpers/util')
@@ -437,6 +439,105 @@ test('can create a cyclic mount', async t => {
         })
       }
     ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
+test.skip('deep mount reads', async t => {
+  const DEPTH = 20
+
+  const { path, cleanup } = await new Promise((resolve, reject) => {
+    tmp.dir((err, path, cleanup) => {
+      if (err) return reject(err)
+      return resolve({ path, cleanup })
+    })
+  })
+  console.log('path:', path)
+
+  const storage = p => {
+    return raf(path + '/' + p)
+  }
+  const { tries } = await create(DEPTH, { _storage: null, alwaysUpdate: false })
+  const ops = []
+  console.log('trie keys:', tries.map(t => t.key))
+
+  for (let i = 1; i < DEPTH; i++) {
+    ops.push(cb => tries[i - 1].mount('/' + i, tries[i].key, cb))
+    ops.push(cb => tries[i - 1].put('/a', 'hello', cb))
+  }
+  try {
+    await runAll([
+      ...ops,
+      /*
+      cb => {
+        console.time('t1')
+        console.log(1)
+        tries[0].get('/1/2/3/4/5/6/7/8/9/a', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          console.timeEnd('t1')
+          return cb()
+        })
+      },
+      cb => {
+        console.time('t1')
+        tries[0].get('/1/2/3/4/5/6/7/8/9/a', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          console.timeEnd('t1')
+          return cb()
+        })
+      },
+      cb => {
+        console.time('t1')
+        tries[0].get('/1/2/3/4/5/6/7/8/9/a', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          console.timeEnd('t1')
+          return cb()
+        })
+      },
+      */
+      cb => {
+        console.time('t1')
+        tries[0].get('/1/a', (err, node) => {
+          console.timeEnd('t1')
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          return cb()
+        })
+      },
+      cb => {
+        console.time('t1')
+        tries[0].get('/1/a', (err, node) => {
+          console.timeEnd('t1')
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          return cb()
+        })
+      },
+      cb => {
+        console.time('t1')
+        tries[0].get('/1/a', (err, node) => {
+          console.timeEnd('t1')
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          return cb()
+        })
+      },
+      cb => {
+        console.time('t1')
+        tries[0].get('/a', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          console.timeEnd('t1')
+          return cb()
+        })
+      }
+    ])
+    //cleanup()
+    t.end()
   } catch (err) {
     t.fail(err)
   }

@@ -309,6 +309,7 @@ class MountableHypertrie extends EventEmitter {
     const self = this
 
     const recursive = !!(opts && opts.recursive)
+    const noMounts = !!(opts && opts.noMounts)
     const gt = !!(opts && opts.gt)
     // gt must always be false in the trie iteration in order to discover mountpoints.
     if (gt) opts = { ...opts, gt: false }
@@ -352,7 +353,7 @@ class MountableHypertrie extends EventEmitter {
         if (!node) return cb(null, null)
 
         node[MountableHypertrie.Symbols.TRIE] = self
-        if (self._isNormalNode(node)) return prereturn(node, cb)
+        if (self._isNormalNode(node) || opts.noMounts) return prereturn(node, cb)
         else if (!recursive && node.key !== prefix) return prereturn(node, cb)
 
         self._getSubtrie(node.key, (err, trie, mountInfo) => {
