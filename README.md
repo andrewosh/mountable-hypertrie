@@ -55,10 +55,10 @@ _Note: We're still adding support for many hypertrie methods. Here's what's been
 - [x] `list`
 - [x] `createReadStream`
 - [ ] `createWriteStream`
-- [ ] `checkout`
+- [x] `checkout`
 - [x] `watch`
 - [ ] `createHistoryStream`
-- [ ] `createDiffStream`
+- [x] `createDiffStream`
 
 ### License
 MIT
