@@ -611,7 +611,7 @@ class MountableHypertrie extends EventEmitter {
     const stream = new HypercoreProtocol(isInitiator, { ...opts })
     this.ready(err => {
       if (err) return stream.destroy(err)
-      this.corestore.replicate(isInitiator, this.discoveryKey, { ...opts, stream })
+      this.corestore.replicate(isInitiator, { ...opts, stream })
     })
     return stream
   }
