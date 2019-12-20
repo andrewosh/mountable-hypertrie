@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/andrewosh/mountable-hypertrie#readme",
   "devDependencies": {
-    "corestore": "^4.0.7",
+    "corestore": "^5.0.0",
     "raf": "^3.4.1",
     "random-access-memory": "^3.1.1",
     "rimraf": "^2.6.3",
