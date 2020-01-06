@@ -138,12 +138,21 @@ class MountableHypertrie extends EventEmitter {
     return node.flags ^ Flags.MOUNT
   }
 
+  _mountInfo () {
+    return {
+      key: this.key,
+      version: this.opts.version ? this.opts.version : null,
+      localPath: '',
+      remotePath: ''
+    }
+  }
+
   _getSubtrie (path, cb) {
     this.trie.get(p.join(MOUNT_PREFIX, path), { hidden: true, closest: true }, (err, mountNode) => {
       if (err) return cb(err)
       const mountPath = mountNode && mountNode.key.slice(7)
       if (this._isNormalNode(mountNode) || p.relative(mountPath, path).startsWith('..')) {
-        return cb(null, this.trie, { localPath: '', remotePath: '' })
+        return cb(null, this.trie, this._mountInfo())
       }
       return this._trieForMountNode(mountNode, cb)
     })
@@ -222,13 +231,15 @@ class MountableHypertrie extends EventEmitter {
 
     this.trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
-      if (!node) return cb(null, null, this)
+      if (!node) return cb(null, null, this, this.key)
       if (this._isNormalNode(node)) {
-        if (node.key !== path && !(opts && opts.closest)) return cb(null, null, this)
-        node[MountableHypertrie.Symbols.TRIE] = this
-        return cb(null, node, this)
+        if (node.key !== path && !(opts && opts.closest)) return cb(null, null, this, this._mountInfo())
+        if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = this
+        const mountInfo = this._mountInfo()
+        if (!node[MountableHypertrie.Symbols.MOUNT]) node[MountableHypertrie.Symbols.MOUNT] = mountInfo
+        return cb(null, node, this, mountInfo)
       }
-      if (node.key === path) return cb(null, node, this)
+      if (node.key === path) return cb(null, node, this, null)
       return this._getSubtrie(path, getFromMount)
     })
 
@@ -237,12 +248,15 @@ class MountableHypertrie extends EventEmitter {
       return trie.get(pathToMount(path, mountInfo), opts, (err, node, subTrie) => {
         if (err) return cb(err)
         subTrie = subTrie || self
-        if (!node) return cb(null, null, subTrie)
+        if (!node) return cb(null, null, subTrie, mountInfo)
         // TODO: do we need to copy the node here?
         node.key = pathFromMount(node.key, mountInfo)
-        if (node.key !== path) return cb(null, null, subTrie)
+        if (node.key !== path) return cb(null, null, subTrie, mountInfo)
+
         if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = subTrie
-        return cb(null, node, subTrie)
+        if (!node[MountableHypertrie.Symbols.MOUNT]) node[MountableHypertrie.Symbols.TRIE] = mountInfo
+
+        return cb(null, node, node[MountableHypertrie.Symbols.TRIE], node[MountableHypertrie.Symbols.MOUNT])
       })
     }
   }
@@ -343,8 +357,11 @@ class MountableHypertrie extends EventEmitter {
             sub = subInfo = subTrie = null
             return next(cb)
           }
+
           node.key = pathFromMount(node.key, subInfo)
+          if (!node[MountableHypertrie.Symbols.MOUNT]) node[MountableHypertrie.Symbols.MOUNT] = subInfo
           if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = subTrie
+
           return prereturn(node, cb)
         })
       }
@@ -353,6 +370,8 @@ class MountableHypertrie extends EventEmitter {
         if (!node) return cb(null, null)
 
         node[MountableHypertrie.Symbols.TRIE] = self
+        node[MountableHypertrie.Symbols.MOUNT] = rootInfo
+
         if (self._isNormalNode(node) || opts.noMounts) return prereturn(node, cb)
         else if (!recursive && node.key !== prefix) return prereturn(node, cb)
 
@@ -618,7 +637,8 @@ class MountableHypertrie extends EventEmitter {
 }
 
 MountableHypertrie.Symbols = MountableHypertrie.prototype.Symbols = {
-  TRIE: Symbol('trie')
+  TRIE: Symbol('trie'),
+  MOUNT: Symbol('mount')
 }
 
 module.exports = MountableHypertrie
