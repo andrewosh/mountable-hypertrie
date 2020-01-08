@@ -369,8 +369,8 @@ class MountableHypertrie extends EventEmitter {
         if (err) return cb(err)
         if (!node) return cb(null, null)
 
-        node[MountableHypertrie.Symbols.TRIE] = self
-        node[MountableHypertrie.Symbols.MOUNT] = rootInfo
+        if (!node[MountableHypertrie.Symbols.TRIE]) node[MountableHypertrie.Symbols.TRIE] = self
+        if (!node[MountableHypertrie.Symbols.MOUNT]) node[MountableHypertrie.Symbols.MOUNT] = rootInfo
 
         if (self._isNormalNode(node) || opts.noMounts) return prereturn(node, cb)
         else if (!recursive && node.key !== prefix) return prereturn(node, cb)
