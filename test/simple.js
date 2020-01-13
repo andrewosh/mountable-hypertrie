@@ -415,6 +415,41 @@ test('delete a mount', async t => {
   }
 })
 
+test('delete a deep subdirectory within a mount', async t => {
+  const { tries } = await create(3, { sameStore: true })
+  const [trie1, trie2, trie3] = tries
+
+  try {
+    await runAll([
+      cb => trie3.put('/c/d/e/f', 'hello', cb),
+      cb => trie2.mount('/b', trie3.key, cb),
+      cb => trie1.mount('/a', trie2.key, cb),
+      cb => {
+        trie1.get('/a/b/c/d/e/f', (err, node) => {
+          t.error(err, 'no error')
+          t.same(node.value, Buffer.from('hello'))
+          return cb(null)
+        })
+      },
+      cb => {
+        trie1.del('/a/b/c/d/e/f', err => {
+          t.error(err, 'no error')
+          return cb(null)
+        })
+      },
+      cb => {
+        trie1.get('/a/b/c/d/e/f', (err, node) => {
+          t.error(err, 'no error')
+          t.false(node)
+          t.end()
+        })
+      }
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
 test('can create a cyclic mount', async t => {
   const { tries } = await create(2)
   const [trie1, trie2] = tries
