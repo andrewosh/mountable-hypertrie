@@ -385,7 +385,7 @@ class MountableHypertrie extends EventEmitter {
 
         self._maybeSetSymbols(node, self, rootInfo, node.key)
 
-        if (self._isNormalNode(node) || opts.noMounts) return prereturn(node, cb)
+        if (self._isNormalNode(node) || noMounts) return prereturn(node, cb)
         else if (!recursive && node.key !== prefix) return prereturn(node, cb)
 
         self._getSubtrie(node.key, (err, trie, mountInfo) => {
