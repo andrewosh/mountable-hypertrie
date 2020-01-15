@@ -225,6 +225,8 @@ class MountableHypertrie extends EventEmitter {
       if (err) return cb(err)
       const innerPath = pathToMount(path, mountInfo)
       trie.get(innerPath, (err, node) => {
+        // If the subtrie is a MountableHypertrie, use the internal hypertrie for the batch.
+        if (trie.trie) trie = trie.trie
         return trie.batch([
           { type: 'del', key: p.join(MOUNT_PREFIX, innerPath), hidden: true },
           { type: 'del', key: innerPath }
