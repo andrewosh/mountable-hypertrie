@@ -79,13 +79,15 @@ class MountableHypertrie extends EventEmitter {
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
     const subfeed = this.corestore.get({ ...opts, key,  version: null, parents: [this.key] })
-    subfeed.ready(err => {
-      if (err) this.emit('error', err)
-      else this.emit('feed', subfeed)
-    })
-
     var trie = this._tries.get(keyString)
     if (opts && opts.cached) return cb(null, trie)
+
+    if (!trie) {
+      subfeed.ready(err => {
+        if (err) this.emit('error', err)
+        else this.emit('feed', subfeed)
+      })
+    }
 
     trie = trie || new MountableHypertrie(this.corestore, key, {
       ...this.opts,
