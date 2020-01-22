@@ -665,7 +665,8 @@ function putCondition (path, opts) {
   const userCondition = opts && opts.condition
   const userClosest = opts && opts.closest
   return (closest, newNode, cb) => {
-    if (closest && (closest.flags & Flags.MOUNT) && newNode.key.startsWith(closest.key)) {
+    const isWithinMount = closest && (newNode.key.startsWith(closest.key) && newNode.key !== closest.key)
+    if (closest && (closest.flags & Flags.MOUNT) && isWithinMount) {
       const err = new Error('Operating on a mountpoint')
       err.mountpoint = true
       return cb(err)

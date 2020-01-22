@@ -514,6 +514,39 @@ test('can create a cyclic mount', async t => {
   }
 })
 
+test('can overwrite value at mountpoint', async t => {
+  const { tries } = await create(2, { sameStore: true })
+  const [trie1, trie2] = tries
+  var mountNode = null
+
+  try {
+    await runAll([
+      cb => trie1.mount('/a', trie2.key, { value: 'hello' }, cb),
+      cb => trie2.put('/b', 'b', cb),
+      cb => trie1.get('/a', (err, node) => {
+        t.error(err, 'no error')
+        mountNode = node
+        return cb(null)
+      }),
+      cb => trie1.put('/a', mountNode.value, { flags: mountNode.flags }, cb),
+      cb => trie1.get('/a', (err, node) => {
+        t.error(err, 'no error')
+        t.same(node.flags, 1)
+        t.same(node.value, Buffer.from('hello'))
+        return cb(null)
+      }),
+      cb => trie1.get('/a/b', (err, node) => {
+        t.error(err, 'no error')
+        t.true(node)
+        if (node) t.same(node.value, Buffer.from('b'))
+        t.end()
+      })
+    ])
+  } catch (err) {
+    t.fail(err)
+  }
+})
+
 test.skip('deep mount reads', async t => {
   const DEPTH = 20
 
