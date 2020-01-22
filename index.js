@@ -78,14 +78,16 @@ class MountableHypertrie extends EventEmitter {
     var versionedTrie = (opts && opts.version) ? this._checkouts.get(`${keyString}:${opts.version}`) : null
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
-    const subfeed = this.corestore.get({ ...opts, key,  version: null, parents: [this.key] })
+    const subfeed = this.corestore.get({ ...opts, key,  version: null })
     var trie = this._tries.get(keyString)
     if (opts && opts.cached) return cb(null, trie)
+    var creating = false
 
     if (!trie) {
+      creating = true
       subfeed.ready(err => {
         if (err) this.emit('error', err)
-        else this.emit('feed', subfeed)
+        else this.emit('feed', subfeed, opts)
       })
     }
 
@@ -95,6 +97,9 @@ class MountableHypertrie extends EventEmitter {
       sparse: this.sparse
     })
     self._tries.set(keyString, trie)
+    if (creating) {
+      trie.on('feed', (feed, opts) => this.emit('feed', feed, opts))
+    }
 
     if (!trie.opened) {
       trie.ready(err => {
