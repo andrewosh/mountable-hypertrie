@@ -50,7 +50,6 @@ class MountableHypertrie extends EventEmitter {
 
     this.feed = this.trie.feed
     if (this.trie !== opts.trie) this.trie.on('error', err => this.emit('error', err))
-    this.feed.once('ready', () => this.emit('feed', feed))
 
     // TODO: Replace with a LRU cache.
     this._tries = new Map()
@@ -66,6 +65,9 @@ class MountableHypertrie extends EventEmitter {
         if (err) return cb(err)
         this.key = this.trie.key
         this.discoveryKey = this.trie.discoveryKey
+        this.emit('feed', this.feed, {
+          version: this.opts && this.opts.version
+        })
         return cb(null)
       })
     })
@@ -81,15 +83,7 @@ class MountableHypertrie extends EventEmitter {
     const subfeed = this.corestore.get({ ...opts, key,  version: null })
     var trie = this._tries.get(keyString)
     if (opts && opts.cached) return cb(null, trie)
-    var creating = false
-
-    if (!trie) {
-      creating = true
-      subfeed.ready(err => {
-        if (err) this.emit('error', err)
-        else this.emit('feed', subfeed, opts)
-      })
-    }
+    var creating = !trie
 
     trie = trie || new MountableHypertrie(this.corestore, key, {
       ...this.opts,
@@ -98,7 +92,9 @@ class MountableHypertrie extends EventEmitter {
     })
     self._tries.set(keyString, trie)
     if (creating) {
-      trie.on('feed', (feed, opts) => this.emit('feed', feed, opts))
+      trie.on('feed', (feed, opts) => {
+        this.emit('feed', feed, opts)
+      })
     }
 
     if (!trie.opened) {
