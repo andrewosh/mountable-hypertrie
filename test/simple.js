@@ -49,6 +49,39 @@ test('simple two-trie get', async t => {
   }
 })
 
+test('mounting a bad key returns an error', async t => {
+  const { tries } = await create(1)
+  const [trie] = tries
+
+  try {
+    await runAll([
+      cb => trie.put('/a', 'hello', cb),
+      cb => trie.mount('/b', 'some bad key', cb)
+    ])
+  } catch (err) {
+    t.true(err.badKey)
+    t.pass('threw an error')
+    t.end()
+  }
+})
+
+test('force-mounting a bad key, then reading from that mountpoint produces an error', async t => {
+  const { tries } = await create(1)
+  const [trie] = tries
+
+  try {
+    await runAll([
+      cb => trie.put('/a', 'hello', cb),
+      cb => trie.mount('/b', 'some bad key', { skipValidation: true }, cb),
+      cb => trie.get('/b/c', cb)
+    ])
+  } catch (err) {
+    t.true(err.badKey)
+    t.pass('threw an error')
+    t.end()
+  }
+})
+
 test('versioned two-trie mount/remount', async t => {
   const { tries } = await create(2)
   const [trie1, trie2] = tries

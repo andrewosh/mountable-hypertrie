@@ -80,7 +80,13 @@ class MountableHypertrie extends EventEmitter {
     var versionedTrie = (opts && opts.version) ? this._checkouts.get(`${keyString}:${opts.version}`) : null
     if (versionedTrie) return process.nextTick(cb, null, versionedTrie)
 
-    const subfeed = this.corestore.get({ ...opts, key,  version: null })
+    try {
+      var subfeed = this.corestore.get({ ...opts, key,  version: null })
+    } catch (err) {
+      err.badKey = true
+      return cb(err)
+    }
+
     var trie = this._tries.get(keyString)
     if (opts && opts.cached) return cb(null, trie)
     var creating = !trie
@@ -195,6 +201,12 @@ class MountableHypertrie extends EventEmitter {
   mount (path, key, opts, cb) {
     if (typeof opts === 'function') return this.mount(path, key, null, opts)
     path = normalize(path)
+
+    if (key.length !== 32 && (!opts || !opts.skipValidation)) {
+      const err = new Error('The mount key is not valid.')
+      err.badKey = true
+      return cb(err)
+    }
 
     const mountRecord = Mount.encode({
       key,
