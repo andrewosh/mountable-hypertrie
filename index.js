@@ -223,12 +223,14 @@ class MountableHypertrie extends EventEmitter {
           { type: 'put', key: p.join(MOUNT_PREFIX, innerPath), flags: Flags.MOUNT, hidden: true, value: mountRecord },
           // TODO: empty values going to cause harm here?
           { type: 'put', key: innerPath, flags: Flags.MOUNT, value: (opts && opts.value) || Buffer.alloc(0) }
-        ], cb)
+        ], err => {
+          if (err) return cb(err)
+          return this._getSubtrie(path, cb)
+        })
       }
-      trie.mount(innerPath, key, opts, err => {
+      return trie.mount(innerPath, key, opts, err => {
         if (err) return cb(err)
-        // Eagerly inflate the mountpoint.
-        return trie._getSubtrie(innerPath, cb)
+        return this._getSubtrie(innerPath, cb)
       })
     })
   }

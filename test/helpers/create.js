@@ -5,16 +5,18 @@ const ram = require('random-access-memory')
 const MountableHypertrie = require('../..')
 
 module.exports.create = async function (numTries, opts = {}) {
-  const sparse = false
+  const sparse = true
+  const ifAvailable = true
+
   const tries = []
   const stores = []
 
   if (opts.sameStore) {
-    var mainStore = new Corestore((opts && opts._storage) || ram, { sparse })
+    var mainStore = new Corestore((opts && opts._storage) || ram, { sparse, ifAvailable })
   }
 
   for (let i = 0; i < numTries; i++) {
-    const store = mainStore ? mainStore : new Corestore((opts && opts._storage) || ram, { sparse })
+    const store = mainStore ? mainStore : new Corestore((opts && opts._storage) || ram, { sparse, ifAvailable })
     await store.ready()
     const feed = store.get()
     const trie = new MountableHypertrie(store, null, { ...opts, sparse, feed })

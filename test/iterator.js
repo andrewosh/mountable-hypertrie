@@ -283,7 +283,7 @@ test('in-memory mount iterator', async t => {
   function validate (cb) {
     rootTrie.listMounts({ memory: true }, (err, vals) => {
       t.error(err, 'no error')
-      t.same(vals.length, 0)
+      t.same(vals.length, 3)
       aTrie.listMounts({ memory: true }, (err, vals) => {
         t.error(err, 'no error')
         t.same(vals.length, 1)
