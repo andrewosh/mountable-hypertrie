@@ -68,6 +68,7 @@ class MountableHypertrie extends EventEmitter {
         this.emit('feed', this.feed, {
           version: this.opts && this.opts.version
         })
+        this.emit('hypertrie', this.trie)
         return cb(null)
       })
     })
@@ -100,6 +101,9 @@ class MountableHypertrie extends EventEmitter {
     if (creating) {
       trie.on('feed', (feed, opts) => {
         this.emit('feed', feed, opts)
+      })
+      trie.on('hypertrie', trie => {
+        this.emit('hypertrie', trie)
       })
     }
 
