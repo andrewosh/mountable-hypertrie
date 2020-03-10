@@ -1,6 +1,6 @@
 {
   "name": "mountable-hypertrie",
-  "version": "2.4.11",
+  "version": "2.4.12",
   "description": "A Hypertrie wrapper that supports mounting of other Hypertries",
   "main": "index.js",
   "scripts": {
