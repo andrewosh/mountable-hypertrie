@@ -189,6 +189,10 @@ class MountableHypertrie extends EventEmitter {
     return this.trie.version
   }
 
+  static getMetadata (feed, cb) {
+    return Hypertrie.getMetadata(feed, cb)
+  }
+
   getMetadata (cb) {
     return this.trie.getMetadata(cb)
   }
