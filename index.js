@@ -190,7 +190,7 @@ class MountableHypertrie extends EventEmitter {
   }
 
   static getMetadata (feed, cb) {
-    return Hypertrie.getMetadata(feed, cb)
+    return hypertrie.getMetadata(feed, cb)
   }
 
   getMetadata (cb) {
