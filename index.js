@@ -273,28 +273,31 @@ class MountableHypertrie extends EventEmitter {
     this.trie.get(path, { ...opts, closest: true }, (err, node) => {
       if (err) return cb(err)
       const mountInfo = this._mountInfo()
-      if (!node) return cb(null, null, this, this._mountInfo, null)
+      if (!node) return cb(null, null, this, mountInfo, path)
       if (this._isNormalNode(node)) {
         this._maybeSetSymbols(node, this, mountInfo, path)
         if (node.key !== path && !(opts && opts.closest)) return cb(null, null, this, mountInfo, path)
         return cb(null, node, this, mountInfo, path)
       }
-      if (node.key === path) return cb(null, node, this, null, null)
+      if (node.key === path) return cb(null, node, this, mountInfo, path)
       return this._getSubtrie(path, getFromMount)
     })
 
     function getFromMount (err, trie, mountInfo) {
       if (err) return cb(err)
       const mountPath = pathToMount(path, mountInfo)
-      return trie.get(mountPath, opts, (err, node, subTrie) => {
+      return trie.get(mountPath, opts, (err, node, subTrie, subMountInfo, subMountPath) => {
         if (err) return cb(err)
         subTrie = subTrie || self
-        if (!node) return cb(null, null, subTrie, mountInfo, null)
-        // TODO: do we need to copy the node here?
-        node.key = pathFromMount(node.key, mountInfo)
-        if (node.key !== path) return cb(null, null, subTrie, mountInfo, null)
+        subMountInfo = subMountInfo || mountInfo
+        subMountPath = subMountPath || mountPath
 
-        self._maybeSetSymbols(node, subTrie, mountInfo, mountPath)
+        if (!node) return cb(null, null, subTrie, subMountInfo, subMountPath)
+
+        node.key = pathFromMount(node.key, mountInfo)
+        if (node.key !== path) return cb(null, null, subTrie, subMountInfo, subMountPath)
+
+        self._maybeSetSymbols(node, subTrie, subMountInfo, subMountPath)
         const { trie: innerTrie, mount: innerMount, innerPath } = self._getSymbols(node)
 
         return cb(null, node, innerTrie, innerMount, innerPath)
