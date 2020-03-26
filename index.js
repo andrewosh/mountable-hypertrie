@@ -65,6 +65,7 @@ class MountableHypertrie extends EventEmitter {
         if (err) return cb(err)
         this.key = this.trie.key
         this.discoveryKey = this.trie.discoveryKey
+        if (this.feed.writable) this.trie.alwaysUpdate = false
         this.emit('feed', this.feed, {
           version: this.opts && this.opts.version
         })
