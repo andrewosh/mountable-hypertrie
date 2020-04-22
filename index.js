@@ -72,6 +72,8 @@ class MountableHypertrie extends EventEmitter {
   }
 
   _createHypertrie (key, opts, cb) {
+    // Ensure the parent key is available.
+    if (!this.key) return this.ready(() => this._createHypertrie(key, opts, cb))
     const self = this
 
     const keyString = key.toString('hex')
