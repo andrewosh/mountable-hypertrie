@@ -40,7 +40,8 @@ class MountableHypertrie extends EventEmitter {
         ...opts,
         feed,
         version: null,
-        alwaysUpdate: true
+        alwaysUpdate: true,
+        alwaysReconnect: true
       })
       this.trie.feed[OWNER] = this.trie
     }
