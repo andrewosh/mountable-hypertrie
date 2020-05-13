@@ -22,6 +22,8 @@ class MountableHypertrie extends EventEmitter {
   constructor (corestore, key, opts = {}) {
     super()
 
+    if (key && (typeof key === 'string')) key = Buffer.from(key, 'hex')
+
     this.corestore = corestore
     this.key = key
     this.discoveryKey = this.key ? hypercoreCrypto.discoveryKey(this.key) : null
