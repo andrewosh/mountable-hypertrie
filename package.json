@@ -32,6 +32,7 @@
     "tmp": "^0.1.0"
   },
   "dependencies": {
+    "hypercore-crypto": "^2.0.1",
     "hypertrie": "^5.0.0",
     "is-options": "^1.0.1",
     "nanoiterator": "^1.2.0",
