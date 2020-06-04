@@ -9,6 +9,7 @@ const nanoiterator = require('nanoiterator')
 const toStream = require('nanoiterator/to-stream')
 const isOptions = require('is-options')
 const unixify = require('unixify')
+const Nanoresource = require('nanoresource/emitter')
 
 const { Mount } = require('./lib/messages')
 
@@ -18,10 +19,9 @@ const Flags = {
 const MOUNT_PREFIX = '/mounts'
 const OWNER = Symbol('mountable-hypertrie-owner')
 
-class MountableHypertrie extends EventEmitter {
+class MountableHypertrie extends Nanoresource {
   constructor (corestore, key, opts = {}) {
     super()
-
     if (key && (typeof key === 'string')) key = Buffer.from(key, 'hex')
 
     this.corestore = corestore
@@ -51,17 +51,32 @@ class MountableHypertrie extends EventEmitter {
       this.trie = this.trie.checkout(opts.version)
     }
 
+    this._unlisteners = []
+
     this.feed = this.trie.feed
-    if (this.trie !== opts.trie) this.trie.on('error', err => this.emit('error', err))
+    if (this.trie !== opts.trie) {
+      const errorListener = err => this.emit('error', err)
+      this.trie.on('error', errorListener)
+      this._unlisteners.push(() => this.trie.removeListener('error', errorListener))
+    }
 
     // TODO: Replace with a LRU cache.
     this._tries = new Map()
     this._checkouts = new Map()
 
-    this.ready = thunky(this._ready.bind(this))
+    this.once('close', () => {
+      for (const unlisten of this._unlisteners) {
+        unlisten()
+      }
+      this._unlisteners = []
+    })
   }
 
-  _ready (cb) {
+  ready (cb) {
+    return this.open(cb)
+  }
+
+  _open (cb) {
     this.corestore.ready(err => {
       if (err) return cb(err)
       this.trie.ready(err => {
@@ -75,6 +90,13 @@ class MountableHypertrie extends EventEmitter {
         this.emit('hypertrie', this.trie)
         return cb(null)
       })
+    })
+  }
+
+  _close (cb) {
+    this.corestore.close(err => {
+      this.emit('close')
+      return cb(err)
     })
   }
 
@@ -103,12 +125,12 @@ class MountableHypertrie extends EventEmitter {
     })
     self._tries.set(keyString, trie)
     if (creating) {
-      trie.on('feed', (feed, opts) => {
-        this.emit('feed', feed, opts)
-      })
-      trie.on('hypertrie', trie => {
-        this.emit('hypertrie', trie)
-      })
+      const onfeed = (feed, opts) => this.emit('feed', feed, opts)
+      const ontrie = trie => this.emit('hypertrie', trie)
+      self._unlisteners.push(() => trie.removeListener('feed', onfeed))
+      self._unlisteners.push(() => trie.removeListener('hypertrie', ontrie))
+      trie.on('feed', onfeed)
+      trie.on('hypertrie', ontrie)
     }
 
     if (!trie.opened) {

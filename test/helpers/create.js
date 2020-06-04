@@ -20,7 +20,7 @@ module.exports.create = async function (numTries, opts = {}) {
     await store.ready()
     const feed = store.get()
     const trie = new MountableHypertrie(store, null, { ...opts, sparse, feed })
-    await promisify(trie.ready)()
+    await promisify(trie.ready.bind(trie))()
     tries.push(trie)
     stores.push(store)
   }
