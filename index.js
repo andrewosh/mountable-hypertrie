@@ -43,7 +43,8 @@ class MountableHypertrie extends Nanoresource {
         feed,
         version: null,
         alwaysUpdate: true,
-        alwaysReconnect: true
+        // TODO: Re-enable once reconnection diffing is fixed.
+        alwaysReconnect: false
       })
       this.trie.feed[OWNER] = this.trie
     }
