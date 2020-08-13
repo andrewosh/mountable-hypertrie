@@ -607,6 +607,7 @@ class MountableHypertrie extends Nanoresource {
     function updateIfMount (node, cb) {
       if (!node) return process.nextTick(cb, null)
       if (self._isNormalNode(node)) return process.nextTick(cb, null, node)
+      if (opts && opts.noMounts) return process.nextTick(cb, null, { info: {} })
       return self._getSubtrie(node.key, (err, trie, mountInfo) => {
         if (err) return cb(err)
         return cb(null, { info: mountInfo })
