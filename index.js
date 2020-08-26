@@ -29,6 +29,7 @@ class MountableHypertrie extends Nanoresource {
     this.discoveryKey = this.key ? hypercoreCrypto.discoveryKey(this.key) : null
     this.opts = opts
     this.sparse = opts.sparse !== false
+    this.headerType = opts.headerType || 'mountable-hypertrie'
 
     if (opts.valueEncoding) throw new Error('MountableHypertrie does not currently support a valueEncoding option.')
 
@@ -43,7 +44,8 @@ class MountableHypertrie extends Nanoresource {
         feed,
         version: null,
         alwaysUpdate: true,
-        alwaysReconnect: true
+        alwaysReconnect: true,
+        headerType: this.headerType
       })
       this.trie.feed[OWNER] = this.trie
     }
