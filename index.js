@@ -1,4 +1,5 @@
-const p = require('path').posix
+const pathRoot = require('path')
+const p = pathRoot.posix || pathRoot
 const { EventEmitter } = require('events')
 
 const hypertrie = require('hypertrie')
