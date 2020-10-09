@@ -305,7 +305,7 @@ class MountableHypertrie extends Nanoresource {
       if (this._isNormalNode(node)) {
         this._maybeSetSymbols(node, this, mountInfo, path)
         if (node.key !== path && !(opts && opts.closest)) return cb(null, null, this, mountInfo, path)
-        if (node.hidden && !opts.hidden) return cb(null, null, this, mountInfo, path)
+        if (node.hidden && !(opts && opts.hidden)) return cb(null, null, this, mountInfo, path)
         return cb(null, node, this, mountInfo, path)
       }
       if (node.key === path) return cb(null, node, this, mountInfo, path)
